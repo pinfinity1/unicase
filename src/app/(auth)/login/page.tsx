@@ -26,7 +26,7 @@ export default function LoginPage() {
           </h2>
           <p className="mt-2 text-sm text-gray-500">
             برای ادامه، وارد حساب{" "}
-            <span className="font-semibold text-gray-800">Casebar</span> خود
+            <span className="font-semibold text-gray-800">UniCase</span> خود
             شوید
           </p>
         </div>
@@ -115,7 +115,7 @@ export default function LoginPage() {
 
           <div className="mt-8 pt-6 border-t border-gray-50 text-center">
             <p className="text-xs text-gray-400 font-medium">
-              © ۲۰۲۵ Casebar. All rights reserved.
+              © ۲۰۲۵ UniCase. All rights reserved.
             </p>
           </div>
         </div>

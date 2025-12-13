@@ -37,7 +37,7 @@ export function AdminSidebar({ onLinkClick }: { onLinkClick?: () => void }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <ShieldCheck className="h-5 w-5" />
           </div>
-          <span className="text-primary">Casebar Admin</span>
+          <span className="text-primary">UniCase Admin</span>
         </Link>
       </div>
 

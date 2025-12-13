@@ -53,7 +53,7 @@ export function MobileSidebar() {
 
       {/* ۳. لوگو (سمت چپ در حالت RTL) */}
       <div className="flex items-center gap-2 font-bold text-lg text-foreground">
-        <span>Casebar</span>
+        <span>UniCase</span>
       </div>
     </div>
   );

@@ -11,8 +11,8 @@ const lalezar = Lalezar({
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | Casebar",
-    default: "Casebar | دنیای قاب و اکسسوری خاص",
+    template: "%s | UniCase",
+    default: "UniCase | دنیای قاب و اکسسوری خاص",
   },
   description: "مرجع تخصصی خرید جدیدترین قاب‌های گوشی و گجت‌های ترند",
 };
