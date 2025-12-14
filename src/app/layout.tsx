@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Lalezar } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
 
 const lalezar = Lalezar({
   weight: "400",
@@ -28,6 +29,7 @@ export default function RootLayout({
         className={`${lalezar.className} font-sans antialiased bg-background text-foreground`}
       >
         {children}
+        <Toaster richColors position="top-center" />
       </body>
     </html>
   );
