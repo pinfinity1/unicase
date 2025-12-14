@@ -53,25 +53,29 @@ export async function deleteImage(imageUrl: string) {
   try {
     if (!imageUrl) return;
 
-    // استخراج "Key" از URL
-    // مثال: http://localhost:9000/unicase-media/products/abc.jpg
-    // ما فقط نیاز داریم به: products/abc.jpg
-    const bucketUrl = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/`;
+    // 👇 تغییر مهم: استخراج Key بدون وابستگی به http://localhost یا پورت
+    // فرض ما این است که ساختار لینک اینطوری است: .../bucket-name/folder/file.jpg
+    const bucketName = process.env.S3_BUCKET_NAME!;
 
-    if (imageUrl.startsWith(bucketUrl)) {
-      const imageKey = imageUrl.replace(bucketUrl, "");
+    // اگر لینک شامل نام باکت نباشد، یعنی لینک معتبر نیست
+    if (!imageUrl.includes(bucketName)) return;
 
-      await s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME!,
-          Key: imageKey,
-        })
-      );
-      console.log(`🗑️ Image deleted from S3: ${imageKey}`);
-    }
+    // قسمت بعد از نام باکت را جدا می‌کنیم (مثلاً /products/image.jpg)
+    const parts = imageUrl.split(`/${bucketName}/`);
+
+    if (parts.length < 2) return;
+
+    // کلید فایل در MinIO (بدون اسلش اول اگر باشد)
+    const imageKey = parts[1];
+
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: imageKey,
+      })
+    );
+    console.log(`🗑️ Image deleted from S3: ${imageKey}`);
   } catch (error) {
     console.error("❌ Error deleting image from S3:", error);
-    // اینجا ارور را throw نمی‌کنیم تا پروسه حذف محصول متوقف نشود
-    // ولی لاگ می‌گیریم تا دستی بررسی کنیم
   }
 }

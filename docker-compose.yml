@@ -33,19 +33,9 @@ services:
       - minio
     entrypoint: >
       /bin/sh -c "
-      # 1. صبر کن تا سرویس MinIO کاملاً لود شود
-      until /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadminpassword; do
-        echo '...waiting for minio...';
-        sleep 1;
-      done;
-
-      # 2. باکت را بساز (ignore if exists یعنی اگر بود ارور نده)
-      /usr/bin/mc mb --ignore-existing myminio/unicase-media;
-
-      # 3. دسترسی پابلیک به آن بده
-      /usr/bin/mc anonymous set public myminio/unicase-media;
-
-      echo '✅ Bucket created and set to public!';
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadminpassword;
+      /usr/bin/mc mb myminio/unicase-media;
+      /usr/bin/mc policy set public myminio/unicase-media;
       exit 0;
       "
 

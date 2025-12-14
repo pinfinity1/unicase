@@ -1,18 +1,33 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
-import { Trash2, Pencil, Loader2, AlertTriangle } from "lucide-react";
 import { deleteCategory } from "@/actions/categories";
 import { CategoryForm } from "./category-form";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  MoreHorizontal,
+  Trash2,
+  Edit,
+  Loader2,
+  AlertTriangle,
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface CategoryActionsProps {
   category: {
@@ -26,54 +41,59 @@ export function CategoryActions({ category }: CategoryActionsProps) {
   const [openEdit, setOpenEdit] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [isDeleting, startTransition] = useTransition();
-  const [deleteError, setDeleteError] = useState("");
 
   const handleDelete = () => {
     startTransition(async () => {
       const result = await deleteCategory(category.id);
       if (result.success) {
+        toast.success(result.message);
         setOpenDelete(false);
       } else {
-        setDeleteError(result.message || "خطایی رخ داد");
+        toast.error(result.message);
       }
     });
   };
 
   return (
-    <div className="flex items-center justify-center gap-2">
-      {/* دکمه ویرایش */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-        onClick={() => setOpenEdit(true)}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
+    <>
+      {/* منوی عملیات (سه نقطه) - دقیقاً مشابه محصولات */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only">باز کردن منو</span>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>عملیات</DropdownMenuLabel>
 
-      {/* مودال ویرایش (از کامپوننت فرم استفاده می‌کند) */}
+          <DropdownMenuItem onClick={() => setOpenEdit(true)}>
+            <Edit className="ml-2 h-4 w-4" />
+            ویرایش
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            onClick={() => setOpenDelete(true)}
+            className="text-red-600 focus:bg-red-50"
+          >
+            <Trash2 className="ml-2 h-4 w-4" />
+            حذف
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* مودال ویرایش */}
       <CategoryForm
         initialData={category}
         open={openEdit}
         onOpenChange={setOpenEdit}
       />
 
-      {/* دکمه حذف */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-        onClick={() => {
-          setDeleteError(""); // ریست کردن ارور قبلی
-          setOpenDelete(true);
-        }}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-
       {/* دیالوگ تایید حذف */}
       <Dialog open={openDelete} onOpenChange={setOpenDelete}>
-        <DialogContent className="sm:max-w-100">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mb-4">
               <AlertTriangle className="h-6 w-6 text-red-600" />
@@ -90,19 +110,11 @@ export function CategoryActions({ category }: CategoryActionsProps) {
             </DialogDescription>
           </DialogHeader>
 
-          {/* نمایش ارور اگر حذف ناموفق بود (مثلاً محصول داشت) */}
-          {deleteError && (
-            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md text-center border border-red-100">
-              {deleteError}
-            </div>
-          )}
-
-          <DialogFooter className="mt-2 sm:justify-center gap-2">
+          <DialogFooter className="mt-2 gap-2 sm:justify-center">
             <Button
               variant="outline"
               onClick={() => setOpenDelete(false)}
               disabled={isDeleting}
-              className="w-full sm:w-auto"
             >
               انصراف
             </Button>
@@ -110,7 +122,7 @@ export function CategoryActions({ category }: CategoryActionsProps) {
               variant="destructive"
               onClick={handleDelete}
               disabled={isDeleting}
-              className="w-full sm:w-auto bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700"
             >
               {isDeleting ? (
                 <>
@@ -124,6 +136,6 @@ export function CategoryActions({ category }: CategoryActionsProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
