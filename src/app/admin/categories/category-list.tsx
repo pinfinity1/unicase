@@ -1,6 +1,4 @@
 import { db } from "@/lib/db";
-import { deleteCategory } from "@/actions/categories";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -9,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trash2 } from "lucide-react";
+import { CategoryActions } from "./category-actions"; // 👈 ایمپورت کامپوننت جدید
 
 export async function CategoryList() {
   const categories = await db.category.findMany({
@@ -36,12 +34,12 @@ export async function CategoryList() {
       <Table>
         <TableHeader className="bg-gray-50/50">
           <TableRow>
-            <TableHead className="text-right font-bold w-[200px]">
+            <TableHead className="text-right font-bold w-50">
               نام دسته
             </TableHead>
             <TableHead className="text-right">لینک (Slug)</TableHead>
             <TableHead className="text-center w-25">محصولات</TableHead>
-            <TableHead className="w-17.5"></TableHead>
+            <TableHead className="w-25 text-center">عملیات</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -62,15 +60,8 @@ export async function CategoryList() {
                 </span>
               </TableCell>
               <TableCell>
-                <form action={deleteCategory.bind(null, cat.id)}>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </form>
+                {/* 👇 استفاده از کامپوننت جدید برای ویرایش و حذف */}
+                <CategoryActions category={cat} />
               </TableCell>
             </TableRow>
           ))}
