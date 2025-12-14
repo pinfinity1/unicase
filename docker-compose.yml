@@ -26,16 +26,31 @@ services:
     volumes:
       - minio_data:/data
 
-  # 👇 سرویس جدید: این کانتینر مسئول ساخت خودکار باکت است
-  createbuckets:
-    image: minio/mc
+  minio-setup:
+    image: minio/mc:latest
+    container_name: unicase_mc
     depends_on:
       - minio
+    volumes:
+      - ./cors.json:/cors.json
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadminpassword;
-      /usr/bin/mc mb myminio/unicase-media;
-      /usr/bin/mc policy set public myminio/unicase-media;
+      echo '⏳ Waiting for MinIO...';
+      until /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadminpassword; do
+        echo '...waiting...';
+        sleep 1;
+      done;
+
+      echo '🚀 Creating bucket...';
+      /usr/bin/mc mb --ignore-existing myminio/unicase-media;
+
+      echo '🔓 Setting public policy...';
+      /usr/bin/mc anonymous set public myminio/unicase-media;
+
+      echo '⚙️ Setting CORS configuration...';
+      /usr/bin/mc cors set myminio/unicase-media /cors.json;
+
+      echo '✅ MinIO Ready!';
       exit 0;
       "
 
