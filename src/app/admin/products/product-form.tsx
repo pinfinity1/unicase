@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { createProduct, updateProduct } from "@/actions/products"; // هر دو ایمپورت شوند
+import { createProduct, updateProduct } from "@/actions/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,10 +17,12 @@ import {
 import { Loader2, UploadCloud } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
+import { Category } from "@prisma/client";
+import { ProductWithCategory } from "@/types";
 
 interface ProductFormProps {
-  categories: { id: string; name: string }[];
-  initialData?: any; // 👈 داده‌های محصول برای ویرایش
+  categories: Category[];
+  initialData?: ProductWithCategory | null;
   onSuccess?: () => void;
 }
 
@@ -31,19 +33,17 @@ export function ProductForm({
   initialData,
   onSuccess,
 }: ProductFormProps) {
-  // انتخاب اکشن مناسب: اگر دیتای اولیه داریم، یعنی ویرایش است
-  const updateProductWithId = initialData
+  const updateProductWithId = initialData?.id
     ? updateProduct.bind(null, initialData.id)
     : null;
 
   const [state, formAction, isPending] = useActionState(
-    initialData ? updateProductWithId! : createProduct,
+    initialData && updateProductWithId ? updateProductWithId : createProduct,
     initialState
   );
 
-  // اگر ویرایش است، عکس قبلی را نشان بده
   const [preview, setPreview] = useState<string | null>(
-    initialData?.images?.[0] || null
+    (initialData?.images as string[])?.[0] || null
   );
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,7 +70,6 @@ export function ProductForm({
 
   return (
     <form action={formAction} className="space-y-6 py-4">
-      {/* عکس */}
       <div className="space-y-2">
         <Label>تصویر محصول</Label>
         <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-4 relative overflow-hidden h-40">
@@ -111,12 +110,16 @@ export function ProductForm({
             placeholder="نام محصول"
           />
           {state.errors?.name && (
+            // @ts-ignore
             <p className="text-red-500 text-xs">{state.errors.name}</p>
           )}
         </div>
         <div className="space-y-2">
           <Label>دسته‌بندی</Label>
-          <Select name="categoryId" defaultValue={initialData?.categoryId}>
+          <Select
+            name="categoryId"
+            defaultValue={initialData?.categoryId || ""}
+          >
             <SelectTrigger>
               <SelectValue placeholder="انتخاب..." />
             </SelectTrigger>
@@ -128,7 +131,9 @@ export function ProductForm({
               ))}
             </SelectContent>
           </Select>
+          {/* @ts-ignore */}
           {state.errors?.categoryId && (
+            // @ts-ignore
             <p className="text-red-500 text-xs">{state.errors.categoryId}</p>
           )}
         </div>
@@ -137,8 +142,16 @@ export function ProductForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label>قیمت (تومان)</Label>
-          <Input name="price" type="number" defaultValue={initialData?.price} />
+          <Input
+            name="price"
+            type="number"
+            defaultValue={
+              initialData?.price ? Number(initialData.price) : undefined
+            }
+          />
+          {/* @ts-ignore */}
           {state.errors?.price && (
+            // @ts-ignore
             <p className="text-red-500 text-xs">{state.errors.price}</p>
           )}
         </div>
@@ -150,7 +163,10 @@ export function ProductForm({
 
       <div className="space-y-2">
         <Label>توضیحات</Label>
-        <Textarea name="description" defaultValue={initialData?.description} />
+        <Textarea
+          name="description"
+          defaultValue={initialData?.description || ""}
+        />
       </div>
 
       <div className="flex items-center justify-between border p-3 rounded-lg">

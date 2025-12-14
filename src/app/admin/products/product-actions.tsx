@@ -30,14 +30,15 @@ import {
 import { MoreHorizontal, Trash2, Edit, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ProductForm } from "./product-form"; // استفاده از فرم خودمان
+import { Category } from "@prisma/client";
+import { ProductWithCategory } from "@/types";
 
-export function ProductActions({
-  product,
-  categories,
-}: {
-  product: any;
-  categories: any[];
-}) {
+interface ProductActionsProps {
+  product: ProductWithCategory;
+  categories: Category[];
+}
+
+export function ProductActions({ product, categories }: ProductActionsProps) {
   const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false); // مودال ویرایش
   const [isPending, startTransition] = useTransition();
