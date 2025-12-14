@@ -64,7 +64,7 @@ export async function ProductList() {
             <TableHead className="text-right">قیمت (تومان)</TableHead>
             <TableHead className="text-center">موجودی</TableHead>
             <TableHead className="text-center">وضعیت</TableHead>
-            <TableHead className="w-[50px]"></TableHead>
+            <TableHead className="w-12.5"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
