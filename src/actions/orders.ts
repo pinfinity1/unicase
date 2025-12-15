@@ -193,3 +193,30 @@ export async function deleteOrder(orderId: string) {
     return { success: false, message: "خطا در حذف سفارش." };
   }
 }
+
+// 👇 آپدیت گروهی وضعیت سفارش‌ها
+export async function bulkUpdateOrderStatus(
+  orderIds: string[],
+  newStatus: OrderStatus
+) {
+  try {
+    // در یک حرکت، همه سفارش‌هایی که آیدیشان در لیست است را آپدیت می‌کند
+    await db.order.updateMany({
+      where: {
+        id: { in: orderIds }, // 👈 نکته کلیدی اینجاست: in array
+      },
+      data: {
+        status: newStatus,
+      },
+    });
+
+    revalidatePath("/admin/orders");
+    return {
+      success: true,
+      message: `${orderIds.length} سفارش با موفقیت آپدیت شدند.`,
+    };
+  } catch (error) {
+    console.error("Bulk Update Error:", error);
+    return { success: false, message: "خطا در آپدیت گروهی." };
+  }
+}
