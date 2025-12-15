@@ -1,81 +1,95 @@
 "use client";
 
-import { useCartStore } from "@/store/cart-store";
-import { CartControls } from "@/components/cart/cart-controls";
+import { useState, useTransition, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { addToCartAction } from "@/actions/cart";
 
 interface AddToCartButtonProps {
-  product: {
-    id: string;
-    name: string;
-    slug: string;
-    price: number;
-    image: string | null;
-    stock: number;
-  };
+  productId: string;
+  stock: number;
+  onSuccess?: () => void; // 👈 پراپ جدید
 }
 
-export function AddToCartButton({ product }: AddToCartButtonProps) {
-  const { items, addItem } = useCartStore();
-  const [isInCart, setIsInCart] = useState(false);
-
-  useEffect(() => {
-    const exists = items.some((item) => item.id === product.id);
-    setIsInCart(exists);
-  }, [items, product.id]);
+export function AddToCartButton({
+  productId,
+  stock,
+  onSuccess,
+}: AddToCartButtonProps) {
+  const [isPending, startTransition] = useTransition();
+  const [buttonState, setButtonState] = useState<"idle" | "success" | "error">(
+    "idle"
+  );
 
   const handleAddToCart = () => {
-    if (product.stock <= 0) {
-      toast.error("موجودی تمام شده است");
-      return;
-    }
-    addItem({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      price: product.price,
-      image: product.image,
-      maxStock: product.stock,
+    if (stock <= 0) return;
+
+    startTransition(async () => {
+      try {
+        const res = await addToCartAction(productId);
+
+        if (res.success) {
+          setButtonState("success");
+          toast.success(res.message);
+
+          // 👇 خبر دادن به والد برای تغییر وضعیت به کنترلر
+          if (onSuccess) {
+            // کمی تاخیر برای دیدن انیمیشن تیک سبز
+            setTimeout(() => {
+              onSuccess();
+            }, 1000);
+          }
+        } else {
+          setButtonState("error");
+          toast.error(res.message);
+        }
+      } catch (error) {
+        setButtonState("error");
+        toast.error("خطای ارتباط با سرور");
+      }
     });
-    toast.success("به سبد خرید اضافه شد");
   };
 
-  // اگر محصول در سبد بود
-  if (isInCart) {
-    return (
-      <div className="w-full flex flex-col items-center gap-3">
-        {/* استفاده از کامپوننت جدید */}
-        <CartControls
-          productId={product.id}
-          maxStock={product.stock}
-          className="w-full max-w-[200px]" // عرض ثابت و جمع‌وجور
-        />
-        <span className="text-[11px] text-gray-400 font-medium">
-          موجود در سبد خرید
-        </span>
-      </div>
-    );
-  }
-
-  // دکمه اصلی افزودن (مینیمال و مدرن)
+  // ... (بقیه کدهای JSX بدون تغییر)
   return (
     <Button
       size="lg"
       onClick={handleAddToCart}
-      disabled={product.stock === 0}
+      disabled={isPending || buttonState === "success"}
       className={cn(
-        "w-full h-14 text-lg rounded-2xl gap-3 transition-colors", // حذف active:scale
-        "bg-gray-900 text-white hover:bg-black shadow-none" // کاملا تخت و مشکی (مینیمال)
+        "w-full h-14 text-lg rounded-2xl gap-3 transition-all duration-300 transform active:scale-[0.98]",
+        buttonState === "success"
+          ? "bg-green-600 hover:bg-green-700 text-white shadow-green-200 shadow-lg"
+          : buttonState === "error"
+          ? "bg-red-600 hover:bg-red-700 text-white"
+          : "bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-200"
       )}
     >
-      <ShoppingCart className="h-5 w-5 opacity-90" />
-      <span className="font-medium">
-        {product.stock > 0 ? "افزودن به سبد خرید" : "خبرم کن"}
-      </span>
+      {isPending ? (
+        <>
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="font-medium">در حال پردازش...</span>
+        </>
+      ) : buttonState === "success" ? (
+        <>
+          <Check className="h-6 w-6 animate-in zoom-in duration-300" />
+          <span className="font-bold animate-in fade-in slide-in-from-bottom-2">
+            به سبد اضافه شد
+          </span>
+        </>
+      ) : buttonState === "error" ? (
+        <>
+          <X className="h-6 w-6" />
+          <span>خطا در ثبت</span>
+        </>
+      ) : (
+        <>
+          <ShoppingCart className="h-5 w-5 opacity-90" />
+          <span className="font-medium">افزودن به سبد خرید</span>
+        </>
+      )}
     </Button>
   );
 }

@@ -15,20 +15,25 @@ export async function requestPayment(
   mobile?: string
 ) {
   try {
+    const payload = {
+      merchant_id: MERCHANT_ID,
+      amount,
+      description,
+      callback_url: callbackUrl,
+      metadata: { mobile },
+    };
+
+    console.log("🔵 ZarinPal Request:", payload); // لاگ درخواست
+
     const response = await fetch(`${BASE_URL}/request.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        merchant_id: MERCHANT_ID,
-        amount, // مبلغ به تومان
-        description,
-        callback_url: callbackUrl,
-        metadata: { mobile },
-      }),
+      body: JSON.stringify(payload),
       cache: "no-store",
     });
 
     const data = await response.json();
+    console.log("🔴 ZarinPal Response:", data); // لاگ پاسخ (مهم)
 
     if (data.data && data.data.code === 100) {
       return {
@@ -42,10 +47,12 @@ export async function requestPayment(
       return { success: false, error: JSON.stringify(data.errors) };
     }
   } catch (error) {
+    console.error("❌ ZarinPal Network Error:", error);
     return { success: false, error: "خطا در ارتباط با زرین‌پال" };
   }
 }
 
+// تابع verifyPayment تغییری لازم ندارد
 export async function verifyPayment(amount: number, authority: string) {
   try {
     const response = await fetch(`${BASE_URL}/verify.json`, {
@@ -61,7 +68,6 @@ export async function verifyPayment(amount: number, authority: string) {
 
     const data = await response.json();
 
-    // کد ۱۰۰: موفق | کد ۱۰۱: قبلاً وریفای شده (موفق)
     if (data.data && (data.data.code === 100 || data.data.code === 101)) {
       return {
         success: true,

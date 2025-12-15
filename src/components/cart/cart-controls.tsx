@@ -1,65 +1,60 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useCartStore } from "@/store/cart-store";
+import { useTransition } from "react";
 import { Minus, Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { updateQuantityAction, removeFromCartAction } from "@/actions/cart";
 
 interface CartControlsProps {
-  productId: string;
+  itemId: string;
+  quantity: number;
   maxStock: number;
   className?: string;
+  // 👇 پراپ جدید: تابعی که وقتی عدد عوض شد صدا زده میشه
+  onUpdate?: (newQuantity: number) => void;
 }
 
 export function CartControls({
-  productId,
+  itemId,
+  quantity,
   maxStock,
   className,
+  onUpdate,
 }: CartControlsProps) {
-  const { items, updateQuantity, removeItem } = useCartStore();
-  const item = items.find((i) => i.id === productId);
+  const [isPending, startTransition] = useTransition();
 
-  const [localQty, setLocalQty] = useState(item?.quantity || 0);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const handleUpdate = (newQty: number) => {
+    if (isPending) return;
 
-  useEffect(() => {
-    if (item) setLocalQty(item.quantity);
-  }, [item?.quantity]);
+    // 🚀 آپدیت سریع UI (قبل از سرور)
+    if (onUpdate) onUpdate(newQty);
 
-  useEffect(() => {
-    if (!item || localQty === item.quantity) {
-      setIsSyncing(false);
-      return;
-    }
-    setIsSyncing(true);
-    const timer = setTimeout(() => {
-      updateQuantity(productId, localQty);
-      setIsSyncing(false);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [localQty, productId, updateQuantity, item]);
-
-  if (!item) return null;
-
-  const handleIncrement = () => {
-    if (localQty < maxStock) setLocalQty((prev) => prev + 1);
-    else toast.error("موجودی کافی نیست");
+    startTransition(async () => {
+      const res = await updateQuantityAction(itemId, newQty);
+      if (!res.success) {
+        // اگر سرور ارور داد، باید برگردیم به عدد قبلی (Rollback)
+        // اینجا فعلا فقط ارور میدیم، ولی میشه state رو هم برگردوند
+        toast.error(res.message);
+        // اگر تابع onUpdateRevert داشتیم اینجا صداش میزدیم
+      }
+    });
   };
 
-  const handleDecrementOrRemove = () => {
-    if (localQty > 1) {
-      setLocalQty((prev) => prev - 1);
-    } else {
-      removeItem(productId);
-      toast.info("حذف شد");
-    }
+  const handleRemove = () => {
+    if (isPending) return;
+
+    // 🚀 آپدیت سریع UI: تعداد صفر میشه
+    if (onUpdate) onUpdate(0);
+
+    startTransition(async () => {
+      const res = await removeFromCartAction(itemId);
+      if (res.success) toast.success("حذف شد");
+      else toast.error(res.message);
+    });
   };
 
   return (
-    // ✨ کانتینر اصلی:
-    // bg-gray-100: زمینه طوسی روشن که روی سفید دیده می‌شود
-    // border border-gray-200: یک خط نازک برای وضوح بیشتر
     <div
       className={cn(
         "flex items-center justify-between rounded-full p-1.5 h-14 w-40 bg-gray-100 border border-gray-200",
@@ -68,36 +63,46 @@ export function CartControls({
     >
       {/* دکمه + */}
       <button
-        onClick={handleIncrement}
-        disabled={localQty >= maxStock}
-        // دکمه سفید روی زمینه طوسی (کنتراست عالی)
-        // حذف scale و جایگزینی با hover:bg-gray-50
-        className="h-11 w-11 flex items-center justify-center cursor-pointer bg-white rounded-full shadow-sm text-gray-700 border border-gray-100 hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        onClick={() => handleUpdate(quantity + 1)}
+        disabled={isPending || quantity >= maxStock}
+        className={cn(
+          "h-11 w-11 flex items-center justify-center rounded-full shadow-sm transition-all duration-200",
+          "bg-white text-gray-700 hover:text-primary border border-gray-100",
+          "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+        )}
       >
         <Plus className="h-5 w-5" />
       </button>
 
       {/* نمایشگر عدد */}
       <div className="flex-1 flex items-center justify-center font-bold text-gray-900 text-lg w-8 font-mono">
-        {isSyncing ? (
-          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        {isPending ? (
+          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
         ) : (
-          // حذف انیمیشن zoom-in برای ثبات بیشتر
-          <span>{localQty.toLocaleString("fa")}</span>
+          <span
+            key={quantity}
+            className="animate-in fade-in zoom-in duration-300"
+          >
+            {quantity.toLocaleString("fa")}
+          </span>
         )}
       </div>
 
       {/* دکمه - یا حذف */}
       <button
-        onClick={handleDecrementOrRemove}
+        onClick={() =>
+          quantity === 1 ? handleRemove() : handleUpdate(quantity - 1)
+        }
+        disabled={isPending}
         className={cn(
-          "h-11 w-11 flex items-center justify-center cursor-pointer bg-white rounded-full shadow-sm border border-gray-100 transition-colors",
-          localQty === 1
-            ? "text-red-500 hover:bg-red-50 hover:border-red-100"
-            : "text-gray-700 hover:text-primary"
+          "h-11 w-11 flex items-center justify-center rounded-full shadow-sm transition-all duration-200 border border-gray-100",
+          quantity === 1
+            ? "bg-white text-red-500 hover:bg-red-50 hover:border-red-100"
+            : "bg-white text-gray-700 hover:text-primary",
+          "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
         )}
       >
-        {localQty === 1 ? (
+        {quantity === 1 ? (
           <Trash2 className="h-5 w-5" />
         ) : (
           <Minus className="h-5 w-5" />

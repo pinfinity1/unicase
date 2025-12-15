@@ -1,22 +1,21 @@
-"use client"; // 👈 این خط حیاتی است
-
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCartStore } from "@/store/cart-store";
-import useStore from "@/hooks/use-store";
-import { cn } from "@/lib/utils";
+import { getCart } from "@/lib/cart";
 
-export function CartCounter() {
-  // استفاده از هوک برای جلوگیری از ارور Hydration
-  const itemsCount = useStore(useCartStore, (state) => state.getTotalItems());
+export async function CartCounter() {
+  // ۱. دریافت سبد از دیتابیس (بدون هوک، مستقیم!)
+  const cart = await getCart();
+
+  // ۲. محاسبه تعداد کل
+  const itemsCount =
+    cart?.items.reduce((acc, item) => acc + item.quantity, 0) || 0;
 
   return (
     <Button variant="ghost" asChild className="relative mr-2">
       <Link href="/cart">
         <ShoppingCart className="h-5 w-5" />
-        {/* نمایش بج (Badge) تعداد فقط زمانی که آیتمی وجود دارد */}
-        {itemsCount && itemsCount > 0 ? (
+        {itemsCount > 0 ? (
           <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm animate-in zoom-in">
             {itemsCount}
           </span>

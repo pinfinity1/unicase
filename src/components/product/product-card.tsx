@@ -1,18 +1,12 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { ShoppingCart } from "lucide-react";
-import { toast } from "sonner";
-import { useCartStore } from "@/store/cart-store";
+import { cn } from "@/lib/utils";
 
 interface ProductCardProps {
   product: {
     id: string;
     name: string;
     slug: string;
-    description: string | null;
     price: number;
     image: string | null;
     stock: number;
@@ -21,74 +15,72 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const formattedPrice = new Intl.NumberFormat("fa-IR").format(product.price);
-
-  // فقط متد افزودن را می‌گیریم
-  const addItem = useCartStore((state) => state.addItem);
-
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault();
-
-    if (product.stock <= 0) {
-      toast.error("موجودی تمام شده است");
-      return;
-    }
-
-    // همیشه ۱ عدد اضافه میکند
-    addItem({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      price: product.price,
-      image: product.image,
-      maxStock: product.stock,
-    });
-
-    toast.success(`${product.name} به سبد خرید اضافه شد`);
-  };
+  const isOutOfStock = product.stock <= 0;
 
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group relative flex flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+      className={cn(
+        "group flex flex-col gap-4 transition-opacity",
+        isOutOfStock && "opacity-75 grayscale-[0.5]" // اگر ناموجود بود کمی کمرنگ شود
+      )}
     >
-      <div className="relative aspect-square overflow-hidden bg-gray-100">
+      {/* ۱. قاب تصویر (Apple Style)
+         - رنگ پس‌زمینه #F5F5F7 (خاکستری روشن معروف اپل)
+         - گردی زیاد (rounded-3xl)
+         - بدون بوردر، بدون سایه شدید
+      */}
+      <div className="relative aspect-square w-full overflow-hidden rounded-[32px] bg-[#F5F5F7] p-6 flex items-center justify-center">
         {product.image ? (
           <Image
             src={product.image}
             alt={product.name}
             fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            // حذف scale و افکت‌های اضافی طبق دستور شما
+            className="object-contain p-4 mix-blend-multiply"
+            // mix-blend-multiply باعث می‌شود پس‌زمینه سفید عکس (اگر داشته باشد) با خاکستری زمینه ترکیب شود
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-300">
-            تصویر ندارد
+          <div className="flex h-full w-full items-center justify-center text-gray-300 text-sm">
+            بدون تصویر
+          </div>
+        )}
+
+        {/* بج ناموجود (مینیمال) */}
+        {isOutOfStock && (
+          <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-gray-500 shadow-sm">
+            ناموجود
           </div>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col p-4">
-        <h3 className="mb-2 text-lg font-bold text-gray-900 line-clamp-1">
+      {/* ۲. بخش اطلاعات (زیر عکس)
+         - بسیار ساده و خوانا
+         - بدون دکمه اضافه
+      */}
+      <div className="flex flex-col items-start px-2 space-y-1.5">
+        {/* نام محصول (حداکثر ۲ خط) */}
+        <h3 className="font-bold text-base text-gray-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
           {product.name}
         </h3>
 
-        {/* قیمت و دکمه */}
-        <div className="mt-auto flex items-center justify-between pt-4">
-          <div className="flex flex-col">
-            <span className="text-lg font-bold text-primary font-mono">
-              {formattedPrice}{" "}
-              <span className="text-xs text-gray-500">تومان</span>
+        {/* قیمت (فونت مونو برای خوانایی اعداد) */}
+        <div className="flex items-center gap-1.5">
+          {isOutOfStock ? (
+            <span className="text-sm font-medium text-gray-400">
+              فعلاً موجود نیست
             </span>
-          </div>
-
-          <Button
-            size="icon"
-            // جلوگیری از کلیک روی لینک والد وقتی دکمه زده میشه
-            onClick={handleAddToCart}
-            disabled={product.stock === 0}
-            className="rounded-xl shadow-md shadow-primary/20 hover:scale-105 transition-all"
-          >
-            <ShoppingCart className="h-5 w-5" />
-          </Button>
+          ) : (
+            <>
+              <span className="text-lg font-semibold text-gray-900 font-mono tracking-tight">
+                {formattedPrice}
+              </span>
+              <span className="text-[11px] font-medium text-gray-500 mt-1">
+                تومان
+              </span>
+            </>
+          )}
         </div>
       </div>
     </Link>

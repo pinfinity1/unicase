@@ -1,8 +1,7 @@
 "use server";
-
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requestPayment } from "@/lib/zarinpal";
 
 const OrderSchema = z.object({
   recipientName: z.string().min(2, "نام گیرنده باید حداقل ۲ حرف باشد"),
@@ -26,6 +25,7 @@ export type OrderState = {
   success?: boolean;
   message?: string;
   orderId?: string;
+  url?: string;
   errors?: Record<string, string[]>;
 };
 
@@ -59,16 +59,14 @@ export async function createOrder(
     validated.data;
 
   try {
-    // ۲. محاسبه قیمت کل (جهت اطمینان سمت سرور هم حساب میکنیم)
     const totalPrice = cartItems.reduce(
       (acc, item) => acc + item.price * item.quantity,
       0
     );
 
-    // ۳. شروع تراکنش (Transaction)
-    // یعنی یا همه مراحل انجام میشه، یا هیچکدوم (برای جلوگیری از باگ موجودی)
+    // ۱. ساخت سفارش در دیتابیس
     const order = await db.$transaction(async (tx) => {
-      // الف) چک کردن موجودی انبار
+      // چک کردن موجودی
       for (const item of cartItems) {
         const product = await tx.product.findUnique({ where: { id: item.id } });
         if (!product || product.stock < item.quantity) {
@@ -76,17 +74,16 @@ export async function createOrder(
         }
       }
 
-      // ب) ثبت سفارش
       const newOrder = await tx.order.create({
         data: {
-          userId: userId || null, // اگر مهمان بود null میشه
+          userId: userId || null,
           recipientName,
           recipientPhone,
           city,
           address,
           postalCode,
           totalPrice,
-          status: "PENDING", // در انتظار پرداخت
+          status: "PENDING",
           items: {
             create: cartItems.map((item) => ({
               productId: item.id,
@@ -97,7 +94,7 @@ export async function createOrder(
         },
       });
 
-      // ج) کم کردن موجودی انبار
+      // کم کردن موجودی
       for (const item of cartItems) {
         await tx.product.update({
           where: { id: item.id },
@@ -108,17 +105,54 @@ export async function createOrder(
       return newOrder;
     });
 
-    revalidatePath("/admin/orders");
-    revalidatePath("/");
+    // ۲. درخواست پرداخت از زرین‌پال (خارج از تراکنش دیتابیس)
+    // نکته: برای پروداکشن باید آدرس سایت را از env بگیرید. فعلاً لوکال:
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    return {
-      success: true,
-      message: "سفارش با موفقیت ثبت شد",
-      orderId: order.id,
-    };
-  } catch (error) {
+    const payment = await requestPayment(
+      totalPrice,
+      `سفارش ${order.id}`,
+      `${appUrl}/payment/verify`,
+      recipientPhone
+    );
+
+    if (payment.success && payment.authority) {
+      // ✅ حالت موفق: ذخیره Authority و ارسال به بانک
+      await db.order.update({
+        where: { id: order.id },
+        data: { paymentAuthority: payment.authority },
+      });
+
+      return {
+        success: true,
+        url: payment.url,
+      };
+    } else {
+      for (const item of cartItems) {
+        await db.product.update({
+          where: { id: item.id },
+          data: { stock: { increment: item.quantity } }, // موجودی برمی‌گردد
+        });
+      }
+
+      // ۲. حذف کامل سفارش از دیتابیس (تغییر اینجاست) 👇
+      await db.order.delete({
+        where: { id: order.id },
+      });
+
+      // لاگ کردن خطا برای دیباگ (که بفهمیم چرا زرین‌پال ارور داده) 👇
+      console.error("ZarinPal Error Log:", payment.error);
+
+      return {
+        success: false,
+        message: "خطا در ارتباط با درگاه پرداخت. سفارش شما ثبت نشد.",
+      };
+    }
+  } catch (error: any) {
     console.error("Order Error:", error);
-    const message = error instanceof Error ? error.message : "خطا در ثبت سفارش";
-    return { success: false, message };
+    return {
+      success: false,
+      message: error.message || "خطا در ثبت سفارش",
+    };
   }
 }

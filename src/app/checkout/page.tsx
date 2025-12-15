@@ -55,11 +55,15 @@ export default function CheckoutPage() {
       const result = await createOrder(formData, items);
 
       if (result.success) {
-        toast.success("سفارش شما با موفقیت ثبت شد!");
-        clearCart(); // خالی کردن سبد خرید
-        // هدایت به صفحه موفقیت (یا خانه فعلا)
-        router.push(`/checkout/success/${result.orderId}`);
-        router.push("/");
+        if (result.url) {
+          // 👇 هدایت به بانک
+          toast.loading("در حال انتقال به درگاه پرداخت...");
+          window.location.href = result.url;
+        } else {
+          toast.success("سفارش ثبت شد.");
+          clearCart();
+          router.push("/");
+        }
       } else {
         toast.error(result.message);
       }
@@ -162,7 +166,7 @@ export default function CheckoutPage() {
                     name="address"
                     placeholder="خیابان، کوچه، پلاک، واحد..."
                     required
-                    className="min-h-[100px] rounded-2xl border-none bg-gray-100/50 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all shadow-inner resize-none pt-3"
+                    className="min-h-25 rounded-2xl border-none bg-gray-100/50 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all shadow-inner resize-none pt-3"
                     onChange={handleInputChange}
                   />
                 </div>
@@ -196,7 +200,7 @@ export default function CheckoutPage() {
               </h3>
 
               {/* لیست کوچک آیتم‌ها */}
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-6">
+              <div className="space-y-3 max-h-75 overflow-y-auto pr-2 custom-scrollbar mb-6">
                 {items.map((item) => (
                   <div
                     key={item.id}

@@ -20,6 +20,7 @@ model User {
   role        Role     @default(USER)
   
   orders      Order[]
+  cart        Cart?
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -56,11 +57,45 @@ model Product {
   categoryId    String
   category      Category @relation(fields: [categoryId], references: [id])
   
+  cartItems     CartItem[]
   orderItems    OrderItem[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+
+model Cart {
+  id            String      @id @default(cuid())
+  
+  // اگر کاربر لاگین بود، این پر میشه
+  userId        String?     @unique 
+  user          User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // اگر کاربر مهمان بود، ما یک کوکی ست میکنیم و آیدیش رو اینجا نگه میداریم
+  sessionCartId String?     
+
+  items         CartItem[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  quantity  Int      @default(1)
+
+  // ما قیمت رو اینجا ذخیره نمیکنیم، چون قیمت باید همیشه از پروداکت اصلی خونده بشه
+  // تا اگر ادمین قیمت رو عوض کرد، سبد خرید هم آپدیت باشه.
+}
+
 
 enum OrderStatus {
   PENDING
