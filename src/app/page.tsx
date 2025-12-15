@@ -1,27 +1,24 @@
-// src/app/page.tsx
 import { db } from "@/lib/db";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-// 👇 کامپوننت جدید را ایمپورت کنید
 import { CartCounter } from "@/components/cart/cart-counter";
+import { ProductClient } from "@/types";
 
 export default async function HomePage() {
   const rawProducts = await db.product.findMany({
     orderBy: { createdAt: "desc" },
     take: 8,
+    include: { category: true },
   });
 
-  const products = rawProducts.map((product) => ({
+  const products: ProductClient[] = rawProducts.map((product) => ({
     ...product,
     price: product.price.toNumber(),
     discountPrice: product.discountPrice
       ? product.discountPrice.toNumber()
       : null,
   }));
-
-  // ❌ خطی که ارور می‌داد (useStore) را از اینجا پاک کنید
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -31,7 +28,6 @@ export default async function HomePage() {
             UniCase
           </h1>
           <div className="flex gap-2 items-center">
-            {/* 👇 دکمه سبد خرید را اینجا اضافه کنید */}
             <CartCounter />
 
             <Button variant="ghost" asChild>

@@ -4,20 +4,18 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-// تعریف ساختار ورودی‌ها (اعتبارسنجی)
 const OrderSchema = z.object({
   recipientName: z.string().min(2, "نام گیرنده باید حداقل ۲ حرف باشد"),
   recipientPhone: z
     .string()
     .min(11, "شماره تماس معتبر نیست")
     .max(11, "شماره تماس معتبر نیست"),
-  province: z.string().min(1, "استان را انتخاب کنید"), // ساده‌سازی: فعلا تکست باکس
+  province: z.string().min(1, "استان را انتخاب کنید"),
   city: z.string().min(1, "شهر را وارد کنید"),
   address: z.string().min(10, "آدرس باید دقیق باشد (حداقل ۱۰ حرف)"),
   postalCode: z.string().min(5, "کد پستی الزامی است"),
 });
 
-// تایپ آیتم‌های سبد خرید که از کلاینت می‌آیند
 type CartItemInput = {
   id: string;
   quantity: number;
@@ -41,9 +39,8 @@ export async function createOrder(
     postalCode: string;
   },
   cartItems: CartItemInput[],
-  userId?: string // اگر کاربر لاگین بود، آیدیش رو میفرستیم
+  userId?: string
 ): Promise<OrderState> {
-  // ۱. اعتبارسنجی فرم
   const validated = OrderSchema.safeParse(formData);
 
   if (!validated.success) {
@@ -119,8 +116,9 @@ export async function createOrder(
       message: "سفارش با موفقیت ثبت شد",
       orderId: order.id,
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Order Error:", error);
-    return { success: false, message: error.message || "خطا در ثبت سفارش" };
+    const message = error instanceof Error ? error.message : "خطا در ثبت سفارش";
+    return { success: false, message };
   }
 }

@@ -14,7 +14,18 @@ const ProductSchema = z.object({
   stock: z.coerce.number().int().min(0),
   categoryId: z.string().min(1, "دسته‌بندی الزامی است."),
   isAvailable: z.coerce.boolean(),
-  image: z.any().optional(),
+  image: z
+    .instanceof(File, { message: "فایل نامعتبر است." })
+    .optional()
+    .refine(
+      (file) => !file || file.size === 0 || file.type.startsWith("image/"),
+      {
+        message: "فقط فایل‌های تصویری مجاز هستند.",
+      }
+    )
+    .refine((file) => !file || file.size <= 5 * 1024 * 1024, {
+      message: "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.",
+    }),
 });
 
 export type ProductFormState = {
