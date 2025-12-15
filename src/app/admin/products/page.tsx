@@ -1,6 +1,6 @@
+import { ProductFormWrapper } from "@/components/admin/products/product-form-wrapper";
+import { ProductList } from "@/components/admin/products/product-list";
 import { db } from "@/lib/db";
-import { ProductFormWrapper } from "./product-form-wrapper";
-import { ProductList } from "./product-list";
 
 export default async function ProductsPage() {
   const categories = await db.category.findMany({

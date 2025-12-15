@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { Lalezar } from "next/font/google";
+import { Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 
-const lalezar = Lalezar({
-  weight: "400",
+const vazir = Vazirmatn({
   subsets: ["arabic"],
-  variable: "--font-lalezar",
+  variable: "--font-vazir",
   display: "swap",
 });
 
@@ -26,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="fa" dir="rtl">
       <body
-        className={`${lalezar.variable} antialiased bg-background text-foreground`}
+        className={`${vazir.variable} font-sans antialiased bg-background text-foreground `}
       >
         {children}
         <Toaster richColors position="top-center" />

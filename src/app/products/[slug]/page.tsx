@@ -1,9 +1,10 @@
+// src/app/products/[slug]/page.tsx
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
-import { ProductGallery } from "@/components/shop/product-gallery";
-import { Button } from "@/components/ui/button";
+import { ProductGallery } from "@/components/product/product-gallery";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, ShieldCheck, Truck } from "lucide-react";
+import { AddToCartButton } from "@/components/product/add-to-cart-btn";
+import { ShieldCheck, Truck } from "lucide-react";
 
 interface ProductPageProps {
   params: Promise<{
@@ -12,7 +13,6 @@ interface ProductPageProps {
 }
 
 export default async function ProductPage(props: ProductPageProps) {
-  // 👇 تغییر ۲: باید params را await کنیم تا آیدی را بگیریم
   const params = await props.params;
   const { slug } = params;
 
@@ -27,6 +27,7 @@ export default async function ProductPage(props: ProductPageProps) {
     return notFound();
   }
 
+  // مدیریت تصاویر برای نمایش در گالری
   const displayImages =
     product.images.length > 0
       ? product.images
@@ -34,9 +35,20 @@ export default async function ProductPage(props: ProductPageProps) {
       ? [product.image]
       : [];
 
+  // فرمت قیمت برای نمایش در همین صفحه (سرور ساید)
   const formattedPrice = new Intl.NumberFormat("fa-IR").format(
     product.price.toNumber()
   );
+
+  // این کار لازم است چون Decimal مستقیماً به کلاینت پاس داده نمی‌شود
+  const productData = {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    price: product.price.toNumber(), // تبدیل مهم
+    image: displayImages[0] || null, // استفاده از اولین تصویر گالری به عنوان تصویر اصلی
+    stock: product.stock,
+  };
 
   return (
     <div className="container mx-auto px-4 py-10">
@@ -65,7 +77,7 @@ export default async function ProductPage(props: ProductPageProps) {
               )}
             </div>
 
-            <h1 className="text-3xl font-bold text-gray-900 md:text-4xl font-lalezar">
+            <h1 className="text-3xl font-bold text-gray-900 md:text-4xl font-sans">
               {product.name}
             </h1>
           </div>
@@ -85,16 +97,8 @@ export default async function ProductPage(props: ProductPageProps) {
           </div>
 
           <div className="flex flex-col gap-4 sm:flex-row">
-            <Button
-              size="lg"
-              className="w-full text-lg h-14 rounded-xl gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all"
-              disabled={product.stock === 0}
-            >
-              <ShoppingCart className="h-6 w-6" />
-              {product.stock > 0
-                ? "افزودن به سبد خرید"
-                : "خبرم کن وقتی موجود شد"}
-            </Button>
+            {/* 👇 جایگزینی دکمه قدیمی با دکمه جدید هوشمند [cite: 8] */}
+            <AddToCartButton product={productData} />
           </div>
 
           {/* مزایا */}

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
-import { AdminSidebar } from "./sidebar";
+import { AdminSidebar } from "./admin-sidebar";
 import { useState } from "react";
 
 export function MobileSidebar() {

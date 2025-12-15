@@ -12,3 +12,11 @@ export type OrderWithDetails = Prisma.OrderGetPayload<{
     items: true;
   };
 }>;
+
+export type ProductClient = Omit<
+  ProductWithCategory,
+  "price" | "discountPrice"
+> & {
+  price: number;
+  discountPrice: number | null;
+};

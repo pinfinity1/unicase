@@ -2,29 +2,47 @@
 
 import Image from "next/image";
 import Link from "next/link";
-// import { Product } from "@prisma/client"; // 👈 این را پاک کنید یا کامنت کنید چون تایپمان دستی شد
 import { Button } from "@/components/ui/button";
 import { ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
+import { useCartStore } from "@/store/cart-store";
 
-// تایپ جدید که با دیتای تبدیل شده در page.tsx هماهنگ است
 interface ProductCardProps {
   product: {
     id: string;
     name: string;
     slug: string;
     description: string | null;
-    price: number; // 👈 قیمت اینجا عدد است، نه Decimal
+    price: number;
     image: string | null;
+    stock: number;
   };
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  // ✅ اصلاح شد: حذف .toNumber() چون ورودی خودش عدد است
   const formattedPrice = new Intl.NumberFormat("fa-IR").format(product.price);
+
+  // فقط متد افزودن را می‌گیریم
+  const addItem = useCartStore((state) => state.addItem);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
+
+    if (product.stock <= 0) {
+      toast.error("موجودی تمام شده است");
+      return;
+    }
+
+    // همیشه ۱ عدد اضافه میکند
+    addItem({
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      price: product.price,
+      image: product.image,
+      maxStock: product.stock,
+    });
+
     toast.success(`${product.name} به سبد خرید اضافه شد`);
   };
 
@@ -40,7 +58,6 @@ export function ProductCard({ product }: ProductCardProps) {
             alt={product.name}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-300">
@@ -54,23 +71,21 @@ export function ProductCard({ product }: ProductCardProps) {
           {product.name}
         </h3>
 
-        <p className="mb-4 text-sm text-gray-500 line-clamp-2">
-          {product.description}
-        </p>
-
-        <div className="mt-auto flex items-center justify-between">
+        {/* قیمت و دکمه */}
+        <div className="mt-auto flex items-center justify-between pt-4">
           <div className="flex flex-col">
-            <span className="text-xs text-gray-400">قیمت:</span>
             <span className="text-lg font-bold text-primary font-mono">
               {formattedPrice}{" "}
-              <span className="text-xs font-normal text-gray-500">تومان</span>
+              <span className="text-xs text-gray-500">تومان</span>
             </span>
           </div>
 
           <Button
             size="icon"
-            className="rounded-full shadow-md hover:scale-110 transition-transform"
+            // جلوگیری از کلیک روی لینک والد وقتی دکمه زده میشه
             onClick={handleAddToCart}
+            disabled={product.stock === 0}
+            className="rounded-xl shadow-md shadow-primary/20 hover:scale-105 transition-all"
           >
             <ShoppingCart className="h-5 w-5" />
           </Button>

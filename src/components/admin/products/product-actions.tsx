@@ -31,10 +31,10 @@ import { MoreHorizontal, Trash2, Edit, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ProductForm } from "./product-form"; // استفاده از فرم خودمان
 import { Category } from "@prisma/client";
-import { ProductWithCategory } from "@/types";
+import { ProductClient } from "@/types";
 
 interface ProductActionsProps {
-  product: ProductWithCategory;
+  product: ProductClient;
   categories: Category[];
 }
 

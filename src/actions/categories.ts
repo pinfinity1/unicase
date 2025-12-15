@@ -3,130 +3,122 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/auth-guard";
+import { slugify } from "@/lib/utils"; // استفاده از تابع مشترک
 
-// اسکیمای اعتبارسنجی
 const CategorySchema = z.object({
-  name: z.string().min(2, { message: "نام دسته‌بندی باید حداقل ۲ حرف باشد." }),
-  slug: z
-    .string()
-    .min(2, { message: "اسلاگ باید حداقل ۲ حرف باشد." })
-    .regex(/^[a-z0-9-]+$/, {
-      message:
-        "اسلاگ فقط می‌تواند شامل حروف انگلیسی کوچک، اعداد و خط تیره باشد.",
-    }),
+  name: z.string().min(2),
+  slug: z.string().min(2),
 });
 
-export type CategoryFormState = {
-  errors?: {
-    name?: string[];
-    slug?: string[];
-    _form?: string[];
-  };
-  message?: string;
-  success?: boolean;
-};
+export async function createCategory(data: z.infer<typeof CategorySchema>) {
+  await requireAdmin();
 
-// --- CREATE ---
-export async function createCategory(
-  prevState: CategoryFormState,
-  formData: FormData
-): Promise<CategoryFormState> {
-  const rawName = formData.get("name") as string;
-  const rawSlug = (formData.get("slug") as string)
-    ?.toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-");
+  const validated = CategorySchema.safeParse(data);
+  if (!validated.success)
+    return { success: false, message: "اطلاعات نامعتبر است" };
 
-  const validated = CategorySchema.safeParse({ name: rawName, slug: rawSlug });
-
-  if (!validated.success) {
-    return {
-      errors: validated.error.flatten().fieldErrors,
-      message: "لطفاً خطاهای فرم را بررسی کنید.",
-      success: false,
-    };
-  }
+  // ۱. تمیزکاری نهایی اسلاگ قبل از ثبت
+  const cleanSlug = slugify(validated.data.slug);
 
   try {
-    await db.category.create({
-      data: { name: validated.data.name, slug: validated.data.slug },
+    // ۲. بررسی تکراری بودن اسلاگ
+    const existing = await db.category.findUnique({
+      where: { slug: cleanSlug },
     });
-    revalidatePath("/admin/categories");
-    return { message: "دسته‌بندی ساخته شد.", success: true };
-  } catch (error: any) {
-    if (error.code === "P2002") {
+
+    if (existing) {
       return {
-        errors: { slug: ["این نامک (Slug) قبلاً استفاده شده است."] },
         success: false,
+        message: "این نامک (Slug) قبلاً استفاده شده است. لطفاً تغییر دهید.",
       };
     }
-    return { message: "خطای دیتابیس رخ داد.", success: false };
+
+    await db.category.create({
+      data: {
+        name: validated.data.name,
+        slug: cleanSlug,
+      },
+    });
+
+    revalidatePath("/admin/categories");
+    return { success: true, message: "دسته‌بندی ساخته شد." };
+  } catch (error) {
+    return { success: false, message: "خطای دیتابیس" };
   }
 }
 
-// --- UPDATE ---
 export async function updateCategory(
   id: string,
-  prevState: CategoryFormState,
-  formData: FormData
-): Promise<CategoryFormState> {
-  const rawName = formData.get("name") as string;
-  const rawSlug = (formData.get("slug") as string)
-    ?.toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-");
+  data: z.infer<typeof CategorySchema>
+) {
+  await requireAdmin();
 
-  const validated = CategorySchema.safeParse({ name: rawName, slug: rawSlug });
+  const validated = CategorySchema.safeParse(data);
+  if (!validated.success)
+    return { success: false, message: "اطلاعات نامعتبر است" };
 
-  if (!validated.success) {
-    return {
-      errors: validated.error.flatten().fieldErrors,
-      message: "لطفاً خطاهای فرم را بررسی کنید.",
-      success: false,
-    };
-  }
+  const cleanSlug = slugify(validated.data.slug);
 
   try {
+    // بررسی تکراری بودن (به جز خودش)
+    const existing = await db.category.findFirst({
+      where: {
+        slug: cleanSlug,
+        NOT: { id: id }, // یعنی اگر اسلاگ تکراری بود ولی مال خود همین آیتم بود، اشکال نداره
+      },
+    });
+
+    if (existing) {
+      return { success: false, message: "این نامک تکراری است." };
+    }
+
     await db.category.update({
       where: { id },
-      data: { name: validated.data.name, slug: validated.data.slug },
+      data: {
+        name: validated.data.name,
+        slug: cleanSlug,
+      },
     });
+
     revalidatePath("/admin/categories");
-    return { message: "دسته‌بندی ویرایش شد.", success: true };
-  } catch (error: any) {
-    if (error.code === "P2002") {
-      return {
-        errors: { slug: ["این نامک قبلاً استفاده شده است."] },
-        success: false,
-      };
-    }
-    return { message: "خطای دیتابیس رخ داد.", success: false };
+    return { success: true, message: "دسته‌بندی ویرایش شد." };
+  } catch (error) {
+    return { success: false, message: "خطای دیتابیس" };
   }
 }
 
-// --- DELETE ---
 export async function deleteCategory(id: string) {
+  await requireAdmin();
+
   try {
-    // ۱. بررسی وجود محصولات
+    // ۱. بررسی اینکه آیا دسته‌بندی وجود دارد؟
     const category = await db.category.findUnique({
       where: { id },
       include: { _count: { select: { products: true } } },
     });
 
-    if (!category) return { success: false, message: "دسته‌بندی یافت نشد." };
+    if (!category) {
+      return { success: false, message: "دسته‌بندی یافت نشد." };
+    }
 
+    // ۲. جلوگیری از حذف دسته‌بندی‌های دارای محصول
     if (category._count.products > 0) {
       return {
         success: false,
-        message: `این دسته‌بندی دارای ${category._count.products} محصول است و نمی‌تواند حذف شود.`,
+        message: `این دسته‌بندی شامل ${category._count.products} محصول است و نمی‌توانید آن را حذف کنید. ابتدا محصولات را منتقل یا حذف کنید.`,
       };
     }
 
-    // ۲. حذف
-    await db.category.delete({ where: { id } });
+    // ۳. حذف نهایی
+    await db.category.delete({
+      where: { id },
+    });
+
     revalidatePath("/admin/categories");
-    return { success: true, message: "دسته‌بندی حذف شد." };
+    return { success: true, message: "دسته‌بندی با موفقیت حذف شد." };
   } catch (error) {
-    return { success: false, message: "خطای سیستمی رخ داده است." };
+    console.error("Delete Category Error:", error);
+    return { success: false, message: "خطای سیستمی در حذف دسته‌بندی." };
   }
 }

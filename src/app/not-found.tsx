@@ -10,7 +10,7 @@ export default function NotFound() {
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-4xl font-bold tracking-tight font-lalezar text-gray-900">
+        <h2 className="text-4xl font-bold tracking-tight font-sans text-gray-900">
           صفحه مورد نظر پیدا نشد
         </h2>
         <p className="text-gray-500 text-lg">
@@ -18,7 +18,7 @@ export default function NotFound() {
         </p>
       </div>
 
-      <Button asChild size="lg" className="mt-4 min-w-[160px]">
+      <Button asChild size="lg" className="mt-4 min-w-40">
         <Link href="/">بازگشت به خانه</Link>
       </Button>
     </div>

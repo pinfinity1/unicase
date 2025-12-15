@@ -1,8 +1,8 @@
 // src/app/admin/orders/page.tsx
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-guard";
-import { OrderList } from "./order-list";
 import { ShoppingBag } from "lucide-react";
+import { OrderList } from "@/components/admin/orders/order-list";
 
 export default async function OrdersPage() {
   await requireAdmin();

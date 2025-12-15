@@ -18,11 +18,11 @@ import { Loader2, UploadCloud } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Category } from "@prisma/client";
-import { ProductWithCategory } from "@/types";
+import { ProductClient } from "@/types";
 
 interface ProductFormProps {
   categories: Category[];
-  initialData?: ProductWithCategory | null;
+  initialData?: ProductClient | null;
   onSuccess?: () => void;
 }
 

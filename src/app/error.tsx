@@ -22,7 +22,7 @@ export default function Error({
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight font-lalezar text-gray-900">
+        <h2 className="text-3xl font-bold tracking-tight font-sans text-gray-900">
           مشکلی پیش آمده است!
         </h2>
         <p className="text-gray-500 text-lg max-w-md mx-auto">

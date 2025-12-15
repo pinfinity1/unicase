@@ -71,11 +71,17 @@ enum OrderStatus {
 
 model Order {
   id          String      @id @default(cuid())
-  userId      String?     
+  userId      String?
   user        User?       @relation(fields: [userId], references: [id])
-  
+
   totalPrice  Decimal     @db.Decimal(10, 2)
   status      OrderStatus @default(PENDING)
+  
+  recipientName  String
+  recipientPhone String
+  address        String
+  city           String
+  postalCode     String
   
   items       OrderItem[]
 

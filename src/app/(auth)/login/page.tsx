@@ -29,12 +29,12 @@ export default function LoginPage() {
             />
           </div>
 
-          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 font-lalezar text-3xl">
+          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 font-sans text-3xl">
             ورود به حساب کاربری
           </h2>
           <p className="mt-2 text-sm text-gray-500">
             برای ادامه، وارد حساب{" "}
-            <span className="font-semibold text-gray-800 font-lalezar text-lg">
+            <span className="font-semibold text-gray-800 font-sans text-lg">
               UniCase
             </span>{" "}
             خود شوید
