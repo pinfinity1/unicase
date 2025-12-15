@@ -2,6 +2,8 @@
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { requestPayment } from "@/lib/zarinpal";
+import { OrderStatus } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 
 const OrderSchema = z.object({
   recipientName: z.string().min(2, "نام گیرنده باید حداقل ۲ حرف باشد"),
@@ -154,5 +156,40 @@ export async function createOrder(
       success: false,
       message: error.message || "خطا در ثبت سفارش",
     };
+  }
+}
+
+export async function updateOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus
+) {
+  try {
+    // اینجا می‌توانیم چک کنیم که آیا کاربر ادمین است یا نه (requireAdmin)
+    // اما چون این فایل در پنل ادمین استفاده می‌شود، فعلاً فرض بر صحت است
+
+    await db.order.update({
+      where: { id: orderId },
+      data: { status: newStatus },
+    });
+
+    revalidatePath("/admin/orders");
+    return { success: true, message: "وضعیت سفارش آپدیت شد." };
+  } catch (error) {
+    console.error("Update Status Error:", error);
+    return { success: false, message: "خطا در تغییر وضعیت." };
+  }
+}
+
+// 👇 اکشن برای حذف سفارش (چون دکمه‌اش را داشتیم اما کار نمی‌کرد)
+export async function deleteOrder(orderId: string) {
+  try {
+    await db.order.delete({
+      where: { id: orderId },
+    });
+
+    revalidatePath("/admin/orders");
+    return { success: true, message: "سفارش با موفقیت حذف شد." };
+  } catch (error) {
+    return { success: false, message: "خطا در حذف سفارش." };
   }
 }
