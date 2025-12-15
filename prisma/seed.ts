@@ -1,28 +1,42 @@
 // prisma/seed.ts
 import { PrismaClient, Role } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Start seeding essential data...");
-
-  // شماره موبایل ادمین (یک شماره پیش‌فرض برای خودت)
+  console.log("🌱 Start seeding...");
   const adminPhone = "09397155826";
+  const passwordRaw = "admin123456";
 
-  const admin = await prisma.user.upsert({
+  // ۱. حذف کاربر قدیمی (اگر وجود دارد)
+  // این کار باعث می‌شود مطمئن شویم دیتای قدیمی و خراب باقی نمی‌ماند
+  const existingUser = await prisma.user.findUnique({
     where: { phoneNumber: adminPhone },
-    update: {},
-    create: {
+  });
+
+  if (existingUser) {
+    await prisma.user.delete({
+      where: { phoneNumber: adminPhone },
+    });
+    console.log("🗑️ Old admin deleted.");
+  }
+
+  // ۲. ساخت مجدد با هش صحیح
+  const hashedPassword = await bcrypt.hash(passwordRaw, 10);
+
+  const admin = await prisma.user.create({
+    data: {
       phoneNumber: adminPhone,
       name: "مدیر اصلی",
       role: Role.ADMIN,
-      // فعلاً یک پسورد ساده می‌گذاریم تا بدون نیاز به سامانه پیامک بتوانی وارد شوی
-      password: "admin123456",
+      password: hashedPassword,
     },
   });
 
-  console.log(`🛡️ Admin user ready: ${admin.phoneNumber}`);
-  console.log("✅ Seeding finished.");
+  console.log(`✅ Admin created with hashed password.`);
+  console.log(`📱 User: ${admin.phoneNumber}`);
+  console.log(`🔑 Pass: ${passwordRaw}`);
 }
 
 main()

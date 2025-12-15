@@ -57,14 +57,14 @@ export function CategoryActions({ category }: CategoryActionsProps) {
   return (
     <>
       {/* منوی عملیات (سه نقطه) - دقیقاً مشابه محصولات */}
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
             <span className="sr-only">باز کردن منو</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="start">
           <DropdownMenuLabel>عملیات</DropdownMenuLabel>
 
           <DropdownMenuItem onClick={() => setOpenEdit(true)}>

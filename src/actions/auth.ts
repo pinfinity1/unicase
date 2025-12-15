@@ -1,25 +1,22 @@
 "use server";
 
+import { signIn, signOut } from "@/auth";
+import { AuthError } from "next-auth";
 import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
-import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
 
-const prisma = new PrismaClient();
-
-// 1. تعریف قوانین اعتبارسنجی
-const LoginFormSchema = z.object({
+const LoginSchema = z.object({
   phoneNumber: z.string().min(11, "شماره موبایل باید ۱۱ رقم باشد"),
   password: z.string().min(6, "رمز عبور باید حداقل ۶ کاراکتر باشد"),
 });
 
 export async function loginAction(prevState: any, formData: FormData) {
-  // 2. دریافت و چک کردن اطلاعات
   const rawData = {
     phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
   };
 
-  const validatedFields = LoginFormSchema.safeParse(rawData);
+  const validatedFields = LoginSchema.safeParse(rawData);
 
   if (!validatedFields.success) {
     return {
@@ -30,28 +27,36 @@ export async function loginAction(prevState: any, formData: FormData) {
 
   const { phoneNumber, password } = validatedFields.data;
 
+  let destination = "/";
+
   try {
-    // 3. پیدا کردن کاربر در دیتابیس
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { phoneNumber },
+      select: { role: true },
     });
 
-    if (!user) {
-      return { message: "کاربری با این شماره یافت نشد" };
+    if (user && user.role === "ADMIN") {
+      destination = "/admin";
     }
 
-    // نکته امنیتی: بعداً اینجا باید از bcrypt برای مقایسه هش استفاده کنیم.
-    // فعلاً چون در seed پسورد ساده گذاشتیم، مستقیم چک می‌کنیم.
-    if (user.password !== password) {
-      return { message: "رمز عبور اشتباه است" };
-    }
-
-    // 4. موفقیت! (اینجا بعداً کوکی ست می‌کنیم)
-    console.log("Login Successful:", user.phoneNumber);
+    await signIn("credentials", {
+      phoneNumber,
+      password,
+      redirectTo: destination,
+    });
   } catch (error) {
-    return { message: "خطای سرور رخ داد" };
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CredentialsSignin":
+          return { message: "شماره موبایل یا رمز عبور اشتباه است." };
+        default:
+          return { message: "خطایی رخ داد." };
+      }
+    }
+    throw error;
   }
+}
 
-  // ریدایرکت باید خارج از بلوک try/catch باشد
-  redirect("/dashboard");
+export async function logoutAction() {
+  await signOut({ redirectTo: "/login" });
 }

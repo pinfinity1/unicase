@@ -2,11 +2,12 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import Image from "next/image"; // 👈 ۱. ایمپورت ایمیج
 import { loginAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ShieldCheck } from "lucide-react"; // آیکون عمومی‌تر انتخاب کردم
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
@@ -15,26 +16,42 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 px-4 py-12 text-gray-900 sm:px-6 lg:px-8">
       <div className="w-full max-w-[380px] space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        {/* هدر عمومی */}
+        {/* هدر صفحه لاگین */}
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-xl shadow-primary/20 ring-4 ring-white mb-6">
-            <ShieldCheck className="h-6 w-6" />
+          {/* ۲. نمایش لوگوی اصلی به جای آیکون پیش‌فرض */}
+          <div className="relative h-20 w-20 mb-4">
+            <Image
+              src="/logo/unicase-black.png" // 👈 مسیر لوگوی شما در public
+              alt="UniCase Logo"
+              fill
+              className="object-contain"
+              priority
+            />
           </div>
-          {/* تغییر متن: به جای پنل مدیریت، نوشتیم حساب کاربری */}
-          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">
+
+          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 font-lalezar text-3xl">
             ورود به حساب کاربری
           </h2>
           <p className="mt-2 text-sm text-gray-500">
             برای ادامه، وارد حساب{" "}
-            <span className="font-semibold text-gray-800">UniCase</span> خود
-            شوید
+            <span className="font-semibold text-gray-800 font-lalezar text-lg">
+              UniCase
+            </span>{" "}
+            خود شوید
           </p>
         </div>
 
         <div className="bg-white px-6 py-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl border border-gray-100 sm:px-10">
           <form action={formAction} className="space-y-6">
             {state?.message && (
-              <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600 border border-red-100 text-center font-medium">
+              <div
+                className={cn(
+                  "rounded-xl p-3 text-sm text-center font-medium border",
+                  state.errors
+                    ? "bg-red-50 text-red-600 border-red-100"
+                    : "bg-blue-50 text-blue-600 border-blue-100" // برای پیام‌های اطلاع‌رسانی احتمالی
+                )}
+              >
                 {state.message}
               </div>
             )}

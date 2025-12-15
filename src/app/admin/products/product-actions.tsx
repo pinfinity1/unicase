@@ -57,13 +57,13 @@ export function ProductActions({ product, categories }: ProductActionsProps) {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="start">
           <DropdownMenuLabel>عملیات</DropdownMenuLabel>
 
           {/* دکمه باز کردن مودال ویرایش */}

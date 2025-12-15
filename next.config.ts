@@ -1,4 +1,9 @@
 const nextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
   images: {
     unoptimized: process.env.NODE_ENV === "development",
     remotePatterns: [

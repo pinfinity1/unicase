@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="fa" dir="rtl">
       <body
-        className={`${lalezar.className} font-sans antialiased bg-background text-foreground`}
+        className={`${lalezar.variable} antialiased bg-background text-foreground`}
       >
         {children}
         <Toaster richColors position="top-center" />

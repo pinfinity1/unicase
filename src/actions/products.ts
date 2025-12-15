@@ -1,17 +1,11 @@
+// مسیر فایل: src/actions/products.ts
 "use server";
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { uploadImage, deleteImage } from "@/lib/s3";
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ACCEPTED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-];
+import { requireAdmin } from "@/lib/auth-guard";
 
 const ProductSchema = z.object({
   name: z.string().min(2, "نام محصول باید حداقل ۲ حرف باشد."),
@@ -20,11 +14,17 @@ const ProductSchema = z.object({
   stock: z.coerce.number().int().min(0),
   categoryId: z.string().min(1, "دسته‌بندی الزامی است."),
   isAvailable: z.coerce.boolean(),
-  image: z.any().optional(), // در ویرایش شاید عکس نفرستند
+  image: z.any().optional(),
 });
 
 export type ProductFormState = {
-  errors?: Record<string, string[]>;
+  errors?: {
+    name?: string[];
+    price?: string[];
+    stock?: string[];
+    categoryId?: string[];
+    description?: string[];
+  };
   message?: string;
   success?: boolean;
 };
@@ -34,10 +34,11 @@ export async function createProduct(
   prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  // ... (کد قبلی شما برای create) ...
-  // برای خلاصه شدن اینجا ننوشتم چون قبلاً دارید، اما اگر خواستید بگویید کامل بگذارم
-  // منطق همان است: validate -> upload -> db create
-  // 👇 فقط برای اینکه کد کامل باشد، بخش create را خلاصه می‌نویسم:
+  try {
+    await requireAdmin();
+  } catch (error) {
+    return { success: false, message: "دسترسی غیرمجاز: شما ادمین نیستید." };
+  }
 
   const validated = ProductSchema.safeParse({
     name: formData.get("name"),
@@ -49,16 +50,23 @@ export async function createProduct(
     image: formData.get("image") as File,
   });
 
-  if (!validated.success)
-    return { errors: validated.error.flatten().fieldErrors, success: false };
+  if (!validated.success) {
+    return {
+      errors: validated.error.flatten().fieldErrors,
+      success: false,
+      message: "لطفاً ورودی‌ها را بررسی کنید.",
+    };
+  }
 
   const { name, description, price, stock, categoryId, isAvailable, image } =
     validated.data;
+
   let imageUrl: string | undefined;
 
   try {
-    if (image && image.size > 0)
+    if (image && image.size > 0) {
       imageUrl = await uploadImage(image, "products");
+    }
 
     await db.product.create({
       data: {
@@ -72,22 +80,33 @@ export async function createProduct(
         stock,
         categoryId,
         isAvailable,
-        images: imageUrl ? [imageUrl] : [],
+        // ✅ اصلاح شد: هم عکس اصلی پر می‌شود و هم گالری
+        image: imageUrl || null, // عکس اصلی (برای کارت محصول)
+        images: imageUrl ? [imageUrl] : [], // گالری (برای اسلایدر صفحه جزئیات)
       },
     });
+
     revalidatePath("/admin/products");
-    return { success: true, message: "محصول ایجاد شد." };
+    revalidatePath("/"); // صفحه اصلی هم باید رفرش شود تا محصول جدید دیده شود
+    return { success: true, message: "محصول با موفقیت ایجاد شد." };
   } catch (e) {
-    return { success: false, message: "خطا در ساخت محصول" };
+    console.error(e);
+    return { success: false, message: "خطا در برقراری ارتباط با دیتابیس." };
   }
 }
 
-// ۲. ویرایش محصول (جدید)
+// ۲. ویرایش محصول
 export async function updateProduct(
   id: string,
   prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
+  try {
+    await requireAdmin();
+  } catch (error) {
+    return { success: false, message: "دسترسی غیرمجاز" };
+  }
+
   const validated = ProductSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
@@ -98,24 +117,34 @@ export async function updateProduct(
     image: formData.get("image") as File,
   });
 
-  if (!validated.success)
-    return { errors: validated.error.flatten().fieldErrors, success: false };
+  if (!validated.success) {
+    return {
+      errors: validated.error.flatten().fieldErrors,
+      success: false,
+      message: "خطا در اعتبارسنجی فرم.",
+    };
+  }
 
   const { name, description, price, stock, categoryId, isAvailable, image } =
     validated.data;
 
   try {
     const product = await db.product.findUnique({ where: { id } });
-    if (!product) return { success: false, message: "محصول پیدا نشد" };
+    if (!product) return { success: false, message: "محصول پیدا نشد." };
 
-    let imageUrl = product.images[0]; // عکس پیش‌فرض همان قبلی است
+    // پیش‌فرض: عکس اصلی قبلی
+    let imageUrl =
+      product.image ||
+      (product.images.length > 0 ? product.images[0] : undefined);
 
     // اگر عکس جدید آپلود شده باشد
     if (image && image.size > 0 && image.name !== "undefined") {
-      // الف) آپلود عکس جدید
       imageUrl = await uploadImage(image, "products");
-      // ب) حذف عکس قدیمی از MinIO (برای تمیز ماندن سرور)
+
+      // حذف عکس قبلی از فضای ابری (اختیاری ولی تمیزتر)
       if (product.images.length > 0) {
+        // اینجا می‌توانیم عکس قبلی را پاک کنیم اما شاید بخواهید در گالری بماند
+        // فعلاً کد حذف شما را نگه می‌دارم که فقط ۱ عکس نگه می‌دارد:
         await deleteImage(product.images[0]);
       }
     }
@@ -129,32 +158,45 @@ export async function updateProduct(
         stock,
         categoryId,
         isAvailable,
-        images: [imageUrl], // بروزرسانی آرایه عکس
+        // ✅ اصلاح شد: آپدیت همزمان عکس اصلی و گالری
+        image: imageUrl,
+        images: imageUrl ? [imageUrl] : [],
       },
     });
 
     revalidatePath("/admin/products");
+    revalidatePath("/");
     return { success: true, message: "محصول ویرایش شد." };
   } catch (error) {
-    return { success: false, message: "خطا در ویرایش محصول" };
+    console.error(error);
+    return { success: false, message: "خطا در ویرایش محصول." };
   }
 }
 
-// ۳. حذف محصول (جدید)
+// ۳. حذف محصول (بدون تغییر)
 export async function deleteProduct(productId: string) {
   try {
-    const product = await db.product.findUnique({ where: { id: productId } });
-    if (!product) return { success: false, message: "محصول نیست" };
+    await requireAdmin();
+  } catch (error) {
+    return { success: false, message: "دسترسی غیرمجاز" };
+  }
 
-    // حذف عکس‌ها از MinIO
+  try {
+    const product = await db.product.findUnique({ where: { id: productId } });
+    if (!product) return { success: false, message: "محصول یافت نشد." };
+
+    // حذف تمام عکس‌های گالری
     for (const img of product.images) {
       await deleteImage(img);
     }
+    // اگر عکس اصلی جداگانه ذخیره شده و در images نیست، اینجا باید آن را هم پاک کنید
+    // اما چون در منطق بالا عکس اصلی حتماً داخل images هم هست، کد فعلی کافیست.
 
     await db.product.delete({ where: { id: productId } });
     revalidatePath("/admin/products");
-    return { success: true, message: "حذف شد." };
+    revalidatePath("/");
+    return { success: true, message: "محصول حذف شد." };
   } catch (error) {
-    return { success: false, message: "خطا در حذف." };
+    return { success: false, message: "خطا در حذف محصول." };
   }
 }

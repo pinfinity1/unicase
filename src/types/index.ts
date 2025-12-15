@@ -5,3 +5,10 @@ export type ProductWithCategory = Prisma.ProductGetPayload<{
     category: true;
   };
 }>;
+
+export type OrderWithDetails = Prisma.OrderGetPayload<{
+  include: {
+    user: true;
+    items: true;
+  };
+}>;
