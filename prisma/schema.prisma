@@ -83,8 +83,11 @@ model Order {
   city           String
   postalCode     String
   
-  items       OrderItem[]
+  paymentAuthority String?   @unique
+  paymentRefId     String?
 
+  items       OrderItem[]
+  
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
