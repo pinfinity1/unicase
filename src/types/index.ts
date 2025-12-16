@@ -6,13 +6,6 @@ export type ProductWithCategory = Prisma.ProductGetPayload<{
   };
 }>;
 
-export type OrderWithDetails = Prisma.OrderGetPayload<{
-  include: {
-    user: true;
-    items: true;
-  };
-}>;
-
 export type ProductClient = Omit<
   ProductWithCategory,
   "price" | "discountPrice"
@@ -20,3 +13,18 @@ export type ProductClient = Omit<
   price: number;
   discountPrice: number | null;
 };
+
+export type FormState = {
+  success?: boolean;
+  message: string;
+  errors?: {
+    [key: string]: string[] | undefined;
+  };
+};
+
+export type OrderWithDetails = Prisma.OrderGetPayload<{
+  include: {
+    user: true;
+    items: true;
+  };
+}>;

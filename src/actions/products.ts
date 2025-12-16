@@ -6,12 +6,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { uploadImage, deleteImage } from "@/lib/s3";
 import { requireAdmin } from "@/lib/auth-guard";
+import { slugify } from "@/lib/utils"; // 👈 استفاده از ابزار استاندارد
+import { FormState } from "@/types"; // 👈 استفاده از تایپ مشترک
 
 const ProductSchema = z.object({
   name: z.string().min(2, "نام محصول باید حداقل ۲ حرف باشد."),
   description: z.string().optional(),
-  price: z.coerce.number().min(0),
-  stock: z.coerce.number().int().min(0),
+  price: z.coerce.number().min(0, "قیمت نمی‌تواند منفی باشد."),
+  stock: z.coerce.number().int().min(0, "موجودی نمی‌تواند منفی باشد."),
   categoryId: z.string().min(1, "دسته‌بندی الزامی است."),
   isAvailable: z.coerce.boolean(),
   image: z
@@ -28,23 +30,11 @@ const ProductSchema = z.object({
     }),
 });
 
-export type ProductFormState = {
-  errors?: {
-    name?: string[];
-    price?: string[];
-    stock?: string[];
-    categoryId?: string[];
-    description?: string[];
-  };
-  message?: string;
-  success?: boolean;
-};
-
 // ۱. ایجاد محصول
 export async function createProduct(
-  prevState: ProductFormState,
+  prevState: FormState, // 👈 تایپ اصلاح شد
   formData: FormData
-): Promise<ProductFormState> {
+): Promise<FormState> {
   try {
     await requireAdmin();
   } catch (error) {
@@ -57,7 +47,7 @@ export async function createProduct(
     price: formData.get("price"),
     stock: formData.get("stock"),
     categoryId: formData.get("categoryId"),
-    isAvailable: formData.get("isAvailable") === "on",
+    isAvailable: formData.get("isAvailable") === "on", // چک باکس
     image: formData.get("image") as File,
   });
 
@@ -79,29 +69,28 @@ export async function createProduct(
       imageUrl = await uploadImage(image, "products");
     }
 
+    // 👈 تولید اسلاگ یکتا با تابع استاندارد + عدد تصادفی برای جلوگیری از تکرار
+    const uniqueSlug = `${slugify(name)}-${Date.now().toString().slice(-4)}`;
+
     await db.product.create({
       data: {
         name,
-        slug:
-          name.toLowerCase().replace(/\s+/g, "-") +
-          "-" +
-          Date.now().toString().slice(-4),
+        slug: uniqueSlug,
         description,
-        price,
+        price, // اینجا عدد پاس می‌دهیم و پریزما خودش به Decimal تبدیل می‌کند (برای Create اوکی است)
         stock,
         categoryId,
         isAvailable,
-        // ✅ اصلاح شد: هم عکس اصلی پر می‌شود و هم گالری
-        image: imageUrl || null, // عکس اصلی (برای کارت محصول)
-        images: imageUrl ? [imageUrl] : [], // گالری (برای اسلایدر صفحه جزئیات)
+        image: imageUrl || null,
+        images: imageUrl ? [imageUrl] : [],
       },
     });
 
     revalidatePath("/admin/products");
-    revalidatePath("/"); // صفحه اصلی هم باید رفرش شود تا محصول جدید دیده شود
+    revalidatePath("/");
     return { success: true, message: "محصول با موفقیت ایجاد شد." };
   } catch (e) {
-    console.error(e);
+    console.error("Create Product Error:", e);
     return { success: false, message: "خطا در برقراری ارتباط با دیتابیس." };
   }
 }
@@ -109,9 +98,9 @@ export async function createProduct(
 // ۲. ویرایش محصول
 export async function updateProduct(
   id: string,
-  prevState: ProductFormState,
+  prevState: FormState, // 👈 تایپ اصلاح شد
   formData: FormData
-): Promise<ProductFormState> {
+): Promise<FormState> {
   try {
     await requireAdmin();
   } catch (error) {
@@ -143,20 +132,18 @@ export async function updateProduct(
     const product = await db.product.findUnique({ where: { id } });
     if (!product) return { success: false, message: "محصول پیدا نشد." };
 
-    // پیش‌فرض: عکس اصلی قبلی
     let imageUrl =
       product.image ||
       (product.images.length > 0 ? product.images[0] : undefined);
 
-    // اگر عکس جدید آپلود شده باشد
+    // اگر عکس جدید آپلود شده بود
     if (image && image.size > 0 && image.name !== "undefined") {
       imageUrl = await uploadImage(image, "products");
 
-      // حذف عکس قبلی از فضای ابری (اختیاری ولی تمیزتر)
+      // حذف عکس قبلی اگر وجود داشت
       if (product.images.length > 0) {
-        // اینجا می‌توانیم عکس قبلی را پاک کنیم اما شاید بخواهید در گالری بماند
-        // فعلاً کد حذف شما را نگه می‌دارم که فقط ۱ عکس نگه می‌دارد:
-        await deleteImage(product.images[0]);
+        // خطا را نادیده می‌گیریم تا پروسه آپدیت متوقف نشود
+        await deleteImage(product.images[0]).catch(console.error);
       }
     }
 
@@ -164,12 +151,14 @@ export async function updateProduct(
       where: { id },
       data: {
         name,
+        // نکته: معمولاً اسلاگ را در ویرایش تغییر نمی‌دهند تا لینک‌های سئو خراب نشود.
+        // اگر می‌خواهید تغییر کند، خط زیر را آنکامنت کنید:
+        // slug: slugify(name),
         description,
         price,
         stock,
         categoryId,
         isAvailable,
-        // ✅ اصلاح شد: آپدیت همزمان عکس اصلی و گالری
         image: imageUrl,
         images: imageUrl ? [imageUrl] : [],
       },
@@ -179,12 +168,12 @@ export async function updateProduct(
     revalidatePath("/");
     return { success: true, message: "محصول ویرایش شد." };
   } catch (error) {
-    console.error(error);
+    console.error("Update Product Error:", error);
     return { success: false, message: "خطا در ویرایش محصول." };
   }
 }
 
-// ۳. حذف محصول (بدون تغییر)
+// ۳. حذف محصول
 export async function deleteProduct(productId: string) {
   try {
     await requireAdmin();
@@ -196,18 +185,22 @@ export async function deleteProduct(productId: string) {
     const product = await db.product.findUnique({ where: { id: productId } });
     if (!product) return { success: false, message: "محصول یافت نشد." };
 
-    // حذف تمام عکس‌های گالری
-    for (const img of product.images) {
-      await deleteImage(img);
+    // تلاش برای حذف عکس‌ها از S3
+    if (product.images && product.images.length > 0) {
+      for (const img of product.images) {
+        await deleteImage(img).catch((err) =>
+          console.error("Failed to delete image from S3:", err)
+        );
+      }
     }
-    // اگر عکس اصلی جداگانه ذخیره شده و در images نیست، اینجا باید آن را هم پاک کنید
-    // اما چون در منطق بالا عکس اصلی حتماً داخل images هم هست، کد فعلی کافیست.
 
     await db.product.delete({ where: { id: productId } });
+
     revalidatePath("/admin/products");
     revalidatePath("/");
     return { success: true, message: "محصول حذف شد." };
   } catch (error) {
+    console.error("Delete Product Error:", error);
     return { success: false, message: "خطا در حذف محصول." };
   }
 }

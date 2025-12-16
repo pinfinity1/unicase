@@ -17,16 +17,22 @@ import {
 import { Loader2, UploadCloud } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
+// 👇 ایمپورت تایپ‌های صحیح
 import { Category } from "@prisma/client";
-import { ProductClient } from "@/types";
+import { FormState, ProductClient } from "@/types";
 
 interface ProductFormProps {
+  // 👇 اصلاح تایپ: به جای any[] از تایپ واقعی دیتابیس استفاده می‌کنیم
   categories: Category[];
   initialData?: ProductClient | null;
   onSuccess?: () => void;
 }
 
-const initialState = { message: "", errors: {}, success: false };
+const initialState: FormState = {
+  message: "",
+  errors: {},
+  success: false,
+};
 
 export function ProductForm({
   categories,
@@ -37,7 +43,8 @@ export function ProductForm({
     ? updateProduct.bind(null, initialData.id)
     : null;
 
-  const [state, formAction, isPending] = useActionState(
+  // 👇 استفاده از جنریک برای تایپ‌سیف کردن هوک
+  const [state, formAction, isPending] = useActionState<FormState, FormData>(
     initialData && updateProductWithId ? updateProductWithId : createProduct,
     initialState
   );
@@ -109,9 +116,11 @@ export function ProductForm({
             defaultValue={initialData?.name}
             placeholder="نام محصول"
           />
+          {/* 👇 نمایش صحیح ارورهای آرایه‌ای */}
           {state.errors?.name && (
-            // @ts-ignore
-            <p className="text-red-500 text-xs">{state.errors.name}</p>
+            <p className="text-red-500 text-xs">
+              {state.errors.name.join(", ")}
+            </p>
           )}
         </div>
         <div className="space-y-2">
@@ -131,10 +140,10 @@ export function ProductForm({
               ))}
             </SelectContent>
           </Select>
-          {/* @ts-ignore */}
           {state.errors?.categoryId && (
-            // @ts-ignore
-            <p className="text-red-500 text-xs">{state.errors.categoryId}</p>
+            <p className="text-red-500 text-xs">
+              {state.errors.categoryId.join(", ")}
+            </p>
           )}
         </div>
       </div>
@@ -145,14 +154,13 @@ export function ProductForm({
           <Input
             name="price"
             type="number"
-            defaultValue={
-              initialData?.price ? Number(initialData.price) : undefined
-            }
+            // 👇 چون ProductClient استفاده می‌کنیم، price الان number است و نیازی به کست ندارد
+            defaultValue={initialData?.price}
           />
-          {/* @ts-ignore */}
           {state.errors?.price && (
-            // @ts-ignore
-            <p className="text-red-500 text-xs">{state.errors.price}</p>
+            <p className="text-red-500 text-xs">
+              {state.errors.price.join(", ")}
+            </p>
           )}
         </div>
         <div className="space-y-2">

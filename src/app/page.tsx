@@ -3,7 +3,7 @@ import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { CartCounter } from "@/components/cart/cart-counter";
-import { ProductClient } from "@/types";
+import { serializeProduct } from "@/lib/utils";
 
 export default async function HomePage() {
   const rawProducts = await db.product.findMany({
@@ -12,13 +12,8 @@ export default async function HomePage() {
     include: { category: true },
   });
 
-  const products: ProductClient[] = rawProducts.map((product) => ({
-    ...product,
-    price: product.price.toNumber(),
-    discountPrice: product.discountPrice
-      ? product.discountPrice.toNumber()
-      : null,
-  }));
+  // تبدیل داده‌ها با تابع استاندارد
+  const products = rawProducts.map(serializeProduct);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -49,7 +44,7 @@ export default async function HomePage() {
         {/* ... */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {products.map((product) => (
-            <ProductCard key={product.id} product={product as any} />
+            <ProductCard key={product.id} product={product} />
           ))}
         </div>
       </main>

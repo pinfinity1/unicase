@@ -1,3 +1,4 @@
+import { ProductClient, ProductWithCategory } from "@/types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -15,4 +16,14 @@ export function slugify(text: string): string {
     .replace(/\-\-+/g, "-") // حذف خط تیره‌های تکراری (--- -> -)
     .replace(/^-+/, "") // حذف خط تیره از اول
     .replace(/-+$/, ""); // حذف خط تیره از آخر
+}
+
+export function serializeProduct(product: ProductWithCategory): ProductClient {
+  return {
+    ...product,
+    price: product.price.toNumber(),
+    discountPrice: product.discountPrice
+      ? product.discountPrice.toNumber()
+      : null,
+  };
 }
