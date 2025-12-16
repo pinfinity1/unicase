@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCart } from "@/lib/cart";
+import { formatPrice } from "@/lib/utils";
 
 export async function CartCounter() {
   // ۱. دریافت سبد از دیتابیس (بدون هوک، مستقیم!)
@@ -17,7 +18,7 @@ export async function CartCounter() {
         <ShoppingCart className="h-5 w-5" />
         {itemsCount > 0 ? (
           <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm animate-in zoom-in">
-            {itemsCount}
+            {formatPrice(itemsCount)}
           </span>
         ) : null}
         <span className="sr-only">سبد خرید</span>
