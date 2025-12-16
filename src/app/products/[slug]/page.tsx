@@ -1,10 +1,12 @@
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { ProductGallery } from "@/components/product/product-gallery";
-import { AddToCartButton } from "@/components/product/add-to-cart-btn";
 import { ShieldCheck, Check, AlertCircle } from "lucide-react";
 import { getCart } from "@/lib/cart";
 import { ProductActionWrapper } from "@/components/product/product-action-wrapper";
+import { ProductJsonLd } from "@/components/seo/product-json-ld"; // 👈 ایمپورت جدید
+import { serializeProduct } from "@/lib/utils"; // 👈 برای تبدیل دسیال
+import { Metadata } from "next";
 
 interface ProductPageProps {
   params: Promise<{
@@ -12,9 +14,11 @@ interface ProductPageProps {
   }>;
 }
 
-export async function generateMetadata(props: ProductPageProps) {
+// ۱. تولید متادیتای کامل برای سئو و سوشال مدیا
+export async function generateMetadata(
+  props: ProductPageProps
+): Promise<Metadata> {
   const params = await props.params;
-  // 👇 اصلاح: دیکد کردن اسلاگ برای خواندن صحیح فارسی
   const slug = decodeURIComponent(params.slug);
 
   const product = await db.product.findUnique({
@@ -27,38 +31,60 @@ export async function generateMetadata(props: ProductPageProps) {
     };
   }
 
+  const images =
+    product.images.length > 0 ? product.images : ["/logo/unicase-black.png"];
+
   return {
     title: product.name,
-    description: product.description?.slice(0, 100),
+    description: product.description?.slice(0, 160), // توضیحات کوتاه برای گوگل
+    openGraph: {
+      title: product.name,
+      description: product.description || "",
+      images: [
+        {
+          url: images[0],
+          width: 800,
+          height: 600,
+          alt: product.name,
+        },
+      ],
+      type: "website",
+      locale: "fa_IR",
+      siteName: "UniCase",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: product.name,
+      images: [images[0]],
+    },
   };
 }
 
 export default async function ProductPage(props: ProductPageProps) {
   const params = await props.params;
-  // 👇 اصلاح: دیکد کردن اسلاگ برای اینکه پریزما بتواند پیدایش کند
   const slug = decodeURIComponent(params.slug);
 
-  // برای دیباگ: اگر باز هم پیدا نشد، این خط رو در ترمینال چک کنید
-  // console.log("Searching for slug:", slug);
-
-  const product = await db.product.findUnique({
-    where: { slug }, // جستجو با اسلاگ دیکد شده
+  const rawProduct = await db.product.findUnique({
+    where: { slug },
     include: { category: true },
   });
 
-  if (!product) return notFound();
+  if (!rawProduct) return notFound();
+
+  // تبدیل دسیال به نامبر برای استفاده در کلاینت
+  const product = serializeProduct(rawProduct);
 
   const cart = await getCart();
   const cartItem = cart?.items.find((item) => item.productId === product.id);
   const initialQty = cartItem ? cartItem.quantity : 0;
 
-  // تبدیل قیمت به فرمت تومان
-  const formattedPrice = new Intl.NumberFormat("fa-IR").format(
-    product.price.toNumber()
-  );
+  const formattedPrice = new Intl.NumberFormat("fa-IR").format(product.price);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      {/* ۲. تزریق اسکیما برای گوگل */}
+      <ProductJsonLd product={product} />
+
       <main className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 bg-white rounded-[40px] p-6 lg:p-10 shadow-sm border border-white/60">
           {/* گالری تصاویر */}
@@ -73,6 +99,7 @@ export default async function ProductPage(props: ProductPageProps) {
                 <span className="px-3 py-1 rounded-full bg-gray-100 text-xs font-medium text-gray-500">
                   {product.category.name}
                 </span>
+
                 {product.stock > 0 ? (
                   <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 text-xs font-medium text-green-600">
                     <Check className="h-3 w-3" />
@@ -110,7 +137,7 @@ export default async function ProductPage(props: ProductPageProps) {
                 </div>
               </div>
 
-              {/* دکمه افزودن به سبد - با پراپ‌های جدید */}
+              {/* دکمه افزودن به سبد */}
               <div className="flex flex-col gap-4">
                 <ProductActionWrapper
                   productId={product.id}

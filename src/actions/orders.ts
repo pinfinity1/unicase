@@ -1,4 +1,5 @@
 "use server";
+
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { requestPayment } from "@/lib/zarinpal";
@@ -20,7 +21,7 @@ const OrderSchema = z.object({
 type CartItemInput = {
   id: string;
   quantity: number;
-  price: number;
+  // price را حذف کردیم چون نباید از کلاینت بیاید (امنیتی)
 };
 
 export type OrderState = {
@@ -61,21 +62,55 @@ export async function createOrder(
     validated.data;
 
   try {
-    const totalPrice = cartItems.reduce(
-      (acc, item) => acc + item.price * item.quantity,
-      0
-    );
-
-    // ۱. ساخت سفارش در دیتابیس
+    // ۱. شروع تراکنش دیتابیس
     const order = await db.$transaction(async (tx) => {
-      // چک کردن موجودی
+      let calculatedTotalPrice = 0;
+      const orderItemsData = [];
+
+      // حلقه روی آیتم‌ها برای: ۱. چک موجودی اتمیک ۲. محاسبه قیمت واقعی
       for (const item of cartItems) {
-        const product = await tx.product.findUnique({ where: { id: item.id } });
-        if (!product || product.stock < item.quantity) {
-          throw new Error(`موجودی محصول "${product?.name}" کافی نیست.`);
+        // الف) دریافت قیمت واقعی از دیتابیس
+        const product = await tx.product.findUnique({
+          where: { id: item.id },
+        });
+
+        if (!product) {
+          throw new Error(`محصول با شناسه ${item.id} یافت نشد.`);
         }
+
+        if (!product.isAvailable) {
+          throw new Error(`محصول "${product.name}" قابل فروش نیست.`);
+        }
+
+        // ب) عملیات اتمیک: فقط در صورتی کم کن که موجودی >= تعداد درخواستی باشد
+        // از updateMany استفاده می‌کنیم چون اجازه فیلتر روی stock را می‌دهد
+        const updateResult = await tx.product.updateMany({
+          where: {
+            id: item.id,
+            stock: { gte: item.quantity }, // 👈 شرط حیاتی برای جلوگیری از Race Condition
+          },
+          data: {
+            stock: { decrement: item.quantity },
+          },
+        });
+
+        // اگر هیچ رکوردی آپدیت نشد، یعنی موجودی کافی نبوده
+        if (updateResult.count === 0) {
+          throw new Error(`موجودی محصول "${product.name}" کافی نیست.`);
+        }
+
+        // ج) محاسبه قیمت امن
+        const realPrice = Number(product.price);
+        calculatedTotalPrice += realPrice * item.quantity;
+
+        orderItemsData.push({
+          productId: product.id,
+          quantity: item.quantity,
+          price: product.price, // قیمت دیتابیس رو ذخیره می‌کنیم
+        });
       }
 
+      // د) ساخت نهایی سفارش
       const newOrder = await tx.order.create({
         data: {
           userId: userId || null,
@@ -84,42 +119,28 @@ export async function createOrder(
           city,
           address,
           postalCode,
-          totalPrice,
+          totalPrice: calculatedTotalPrice, // قیمت محاسبه شده در سرور
           status: "PENDING",
           items: {
-            create: cartItems.map((item) => ({
-              productId: item.id,
-              quantity: item.quantity,
-              price: item.price,
-            })),
+            create: orderItemsData,
           },
         },
       });
 
-      // کم کردن موجودی
-      for (const item of cartItems) {
-        await tx.product.update({
-          where: { id: item.id },
-          data: { stock: { decrement: item.quantity } },
-        });
-      }
-
       return newOrder;
     });
 
-    // ۲. درخواست پرداخت از زرین‌پال (خارج از تراکنش دیتابیس)
-    // نکته: برای پروداکشن باید آدرس سایت را از env بگیرید. فعلاً لوکال:
+    // ۲. درخواست پرداخت (بعد از موفقیت تراکنش دیتابیس)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     const payment = await requestPayment(
-      totalPrice,
+      Number(order.totalPrice),
       `سفارش ${order.id}`,
-      `${appUrl}/payment/verify`,
+      `${appUrl}/payment/verify`, // حتما این فایل باید ساخته شود
       recipientPhone
     );
 
     if (payment.success && payment.authority) {
-      // ✅ حالت موفق: ذخیره Authority و ارسال به بانک
       await db.order.update({
         where: { id: order.id },
         data: { paymentAuthority: payment.authority },
@@ -130,28 +151,25 @@ export async function createOrder(
         url: payment.url,
       };
     } else {
+      // اگر درگاه خطا داد، باید موجودی کسر شده را برگردانیم (Rollback دستی)
+      // چون تراکنش دیتابیس قبلاً کامیت شده است.
       for (const item of cartItems) {
         await db.product.update({
           where: { id: item.id },
-          data: { stock: { increment: item.quantity } }, // موجودی برمی‌گردد
+          data: { stock: { increment: item.quantity } },
         });
       }
 
-      // ۲. حذف کامل سفارش از دیتابیس (تغییر اینجاست) 👇
-      await db.order.delete({
-        where: { id: order.id },
-      });
+      await db.order.delete({ where: { id: order.id } });
 
-      // لاگ کردن خطا برای دیباگ (که بفهمیم چرا زرین‌پال ارور داده) 👇
       console.error("ZarinPal Error Log:", payment.error);
-
       return {
         success: false,
-        message: "خطا در ارتباط با درگاه پرداخت. سفارش شما ثبت نشد.",
+        message: "خطا در ارتباط با درگاه پرداخت. سفارش لغو شد.",
       };
     }
   } catch (error: any) {
-    console.error("Order Error:", error);
+    console.error("Order Creation Error:", error);
     return {
       success: false,
       message: error.message || "خطا در ثبت سفارش",
@@ -159,34 +177,26 @@ export async function createOrder(
   }
 }
 
+// توابع کمکی ادمین (بدون تغییر لاجیک، فقط تایپ‌ها)
 export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus
 ) {
   try {
-    // اینجا می‌توانیم چک کنیم که آیا کاربر ادمین است یا نه (requireAdmin)
-    // اما چون این فایل در پنل ادمین استفاده می‌شود، فعلاً فرض بر صحت است
-
     await db.order.update({
       where: { id: orderId },
       data: { status: newStatus },
     });
-
     revalidatePath("/admin/orders");
     return { success: true, message: "وضعیت سفارش آپدیت شد." };
   } catch (error) {
-    console.error("Update Status Error:", error);
     return { success: false, message: "خطا در تغییر وضعیت." };
   }
 }
 
-// 👇 اکشن برای حذف سفارش (چون دکمه‌اش را داشتیم اما کار نمی‌کرد)
 export async function deleteOrder(orderId: string) {
   try {
-    await db.order.delete({
-      where: { id: orderId },
-    });
-
+    await db.order.delete({ where: { id: orderId } });
     revalidatePath("/admin/orders");
     return { success: true, message: "سفارش با موفقیت حذف شد." };
   } catch (error) {
@@ -194,29 +204,21 @@ export async function deleteOrder(orderId: string) {
   }
 }
 
-// 👇 آپدیت گروهی وضعیت سفارش‌ها
 export async function bulkUpdateOrderStatus(
   orderIds: string[],
   newStatus: OrderStatus
 ) {
   try {
-    // در یک حرکت، همه سفارش‌هایی که آیدیشان در لیست است را آپدیت می‌کند
     await db.order.updateMany({
-      where: {
-        id: { in: orderIds }, // 👈 نکته کلیدی اینجاست: in array
-      },
-      data: {
-        status: newStatus,
-      },
+      where: { id: { in: orderIds } },
+      data: { status: newStatus },
     });
-
     revalidatePath("/admin/orders");
     return {
       success: true,
       message: `${orderIds.length} سفارش با موفقیت آپدیت شدند.`,
     };
   } catch (error) {
-    console.error("Bulk Update Error:", error);
     return { success: false, message: "خطا در آپدیت گروهی." };
   }
 }
