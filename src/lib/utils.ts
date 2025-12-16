@@ -22,12 +22,16 @@ export function formatPrice(price: number | string) {
   return new Intl.NumberFormat("fa-IR").format(Number(price));
 }
 
-export function serializeProduct(product: ProductWithCategory): ProductClient {
+export function serializeProduct(product: any): ProductClient {
   return {
     ...product,
-    price: product.price.toNumber(),
+    price: product.price.toString(),
     discountPrice: product.discountPrice
-      ? product.discountPrice.toNumber()
+      ? product.discountPrice.toString()
       : null,
+    createdAt: product.createdAt.toString(),
+    updatedAt: product.updatedAt.toString(),
+    category: product.category,
+    brand: product.brand || null,
   };
 }

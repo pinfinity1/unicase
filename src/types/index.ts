@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Brand, Category, Prisma } from "@prisma/client";
 
 export type ProductWithCategory = Prisma.ProductGetPayload<{
   include: {
@@ -12,6 +12,10 @@ export type ProductClient = Omit<
 > & {
   price: number;
   discountPrice: number | null;
+  category: Category;
+  brand: Brand | null; // 👈 اضافه شد (میتونه null باشه)
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type FormState = {
