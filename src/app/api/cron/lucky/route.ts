@@ -9,7 +9,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const key = searchParams.get("key");
 
-    if (key !== "unicase-secret-key") {
+    // 🔒 اصلاح امنیتی: خواندن از متغیر محیطی
+    const CRON_SECRET = process.env.CRON_SECRET;
+
+    // اگر متغیر محیطی ست نشده بود یا کلید اشتباه بود، خطا بده
+    if (!CRON_SECRET || key !== CRON_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -21,6 +25,7 @@ export async function GET(request: Request) {
       message: "Lucky deals updated!",
     });
   } catch (error) {
+    console.error("Cron Lucky Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

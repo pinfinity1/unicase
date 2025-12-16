@@ -5,15 +5,18 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    // بررسی رمز امنیتی
     const { searchParams } = new URL(request.url);
     const key = searchParams.get("key");
 
-    if (key !== "unicase-secret-key") {
+    // 🔒 اصلاح امنیتی: خواندن از متغیر محیطی
+    const CRON_SECRET = process.env.CRON_SECRET;
+
+    // بررسی وجود متغیر محیطی و تطابق کلید
+    if (!CRON_SECRET || key !== CRON_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // اجرای تابع آپدیت محبوب‌ترین‌ها
+    // اجرای تابع آپدیت
     await generateFeaturedProducts();
 
     return NextResponse.json({
@@ -21,6 +24,7 @@ export async function GET(request: Request) {
       message: "Featured products updated!",
     });
   } catch (error) {
+    console.error("Cron Error:", error); // لاگ کردن خطا برای دیباگ
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

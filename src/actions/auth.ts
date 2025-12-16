@@ -1,16 +1,19 @@
 "use server";
-
 import { signIn, signOut } from "@/auth";
 import { AuthError } from "next-auth";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { FormState } from "@/types";
 
 const LoginSchema = z.object({
   phoneNumber: z.string().min(11, "شماره موبایل باید ۱۱ رقم باشد"),
   password: z.string().min(6, "رمز عبور باید حداقل ۶ کاراکتر باشد"),
 });
 
-export async function loginAction(prevState: any, formData: FormData) {
+export async function loginAction(
+  prevState: FormState | undefined,
+  formData: FormData
+): Promise<FormState | undefined> {
   const rawData = {
     phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
@@ -20,13 +23,13 @@ export async function loginAction(prevState: any, formData: FormData) {
 
   if (!validatedFields.success) {
     return {
+      success: false,
       message: "فرمت اطلاعات اشتباه است",
       errors: validatedFields.error.flatten().fieldErrors,
     };
   }
 
   const { phoneNumber, password } = validatedFields.data;
-
   let destination = "/";
 
   try {
@@ -44,13 +47,17 @@ export async function loginAction(prevState: any, formData: FormData) {
       password,
       redirectTo: destination,
     });
+    return { success: true, message: "ورود موفقیت‌آمیز" };
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
         case "CredentialsSignin":
-          return { message: "شماره موبایل یا رمز عبور اشتباه است." };
+          return {
+            success: false,
+            message: "شماره موبایل یا رمز عبور اشتباه است.",
+          };
         default:
-          return { message: "خطایی رخ داد." };
+          return { success: false, message: "خطایی رخ داد." };
       }
     }
     throw error;
