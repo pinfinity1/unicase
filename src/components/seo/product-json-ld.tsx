@@ -16,7 +16,7 @@ export function ProductJsonLd({ product }: ProductJsonLdProps) {
     offers: {
       "@type": "Offer",
       url: `${process.env.NEXT_PUBLIC_APP_URL}/products/${product.slug}`,
-      priceCurrency: "IRT", // یا IRT اگر تومان است (گوگل با IRR بهتر کار می‌کند معمولا)
+      priceCurrency: "IRR", // یا IRT اگر تومان است (گوگل با IRR بهتر کار می‌کند معمولا)
       price: product.price, // قیمت به عدد
       priceValidUntil: new Date(
         new Date().setFullYear(new Date().getFullYear() + 1)
