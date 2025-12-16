@@ -30,7 +30,11 @@ export default function RootLayout({
       >
         <Providers>
           {children}
-          <Toaster richColors position="top-center" />
+          <Toaster
+            richColors
+            position="top-center"
+            toastOptions={{ className: "font-sans" }}
+          />
         </Providers>
       </body>
     </html>
