@@ -6,8 +6,11 @@ import { db } from "@/lib/db";
 
 export default async function ProductsPage() {
   const categories = await db.category.findMany({
-    select: { id: true, name: true },
     orderBy: { createdAt: "desc" },
+  });
+
+  const brands = await db.brand.findMany({
+    orderBy: { name: "asc" },
   });
 
   return (
@@ -25,7 +28,7 @@ export default async function ProductsPage() {
 
           <GenerateFeaturedButton />
 
-          <ProductFormWrapper categories={categories} />
+          <ProductFormWrapper categories={categories} brands={brands} />
         </div>
       </div>
 

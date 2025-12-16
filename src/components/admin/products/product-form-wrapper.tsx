@@ -4,7 +4,9 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-// 👇 تغییر ایمپورت‌ها از Sheet به Dialog
+// 👇 ۱. ایمپورت تایپ‌ها
+import { Category, Brand } from "@prisma/client";
+
 import {
   Dialog,
   DialogContent,
@@ -31,7 +33,16 @@ const ProductForm = dynamic(
   }
 );
 
-export function ProductFormWrapper({ categories }: { categories: any[] }) {
+// 👇 ۲. اصلاح اینترفیس ورودی
+interface ProductFormWrapperProps {
+  categories: Category[];
+  brands: Brand[]; // 👈 اضافه شد
+}
+
+export function ProductFormWrapper({
+  categories,
+  brands,
+}: ProductFormWrapperProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -43,14 +54,18 @@ export function ProductFormWrapper({ categories }: { categories: any[] }) {
         </Button>
       </DialogTrigger>
 
-      {/* 👇 نکته مهم: max-w-2xl برای عرض بیشتر و max-h-[90vh] برای جلوگیری از بیرون زدن از صفحه */}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>افزودن محصول</DialogTitle>
           <DialogDescription>مشخصات محصول جدید را وارد کنید.</DialogDescription>
         </DialogHeader>
 
-        <ProductForm categories={categories} onSuccess={() => setOpen(false)} />
+        {/* 👇 ۳. پاس دادن برندها به فرم */}
+        <ProductForm
+          categories={categories}
+          brands={brands} // 👈 ✅ این خط مشکل را حل می‌کند
+          onSuccess={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
