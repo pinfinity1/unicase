@@ -10,6 +10,7 @@ import {
 import Image from "next/image";
 import { ImageIcon, Archive, CheckCircle2, XCircle } from "lucide-react";
 import { ProductActions } from "./product-actions";
+import { serializeProduct } from "@/lib/utils";
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("fa-IR").format(price);
@@ -18,20 +19,18 @@ const formatPrice = (price: number) => {
 export async function ProductList() {
   const rawProducts = await db.product.findMany({
     orderBy: { createdAt: "desc" },
-    include: { category: true },
+    include: { category: true, brand: true },
   });
   const categories = await db.category.findMany({
     orderBy: { createdAt: "desc" },
   });
 
+  const brands = await db.brand.findMany({
+    orderBy: { name: "asc" },
+  });
+
   // تبدیل دیتای خام
-  const products = rawProducts.map((product) => ({
-    ...product,
-    price: product.price.toNumber(),
-    discountPrice: product.discountPrice
-      ? product.discountPrice.toNumber()
-      : null,
-  }));
+  const products = rawProducts.map((product) => serializeProduct(product));
 
   if (products.length === 0) {
     return (
@@ -134,7 +133,11 @@ export async function ProductList() {
               </TableCell>
 
               <TableCell>
-                <ProductActions product={product} categories={categories} />
+                <ProductActions
+                  product={product}
+                  categories={categories}
+                  brands={brands}
+                />
               </TableCell>
             </TableRow>
           ))}

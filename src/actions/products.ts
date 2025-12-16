@@ -1,4 +1,3 @@
-// مسیر فایل: src/actions/products.ts
 "use server";
 
 import { db } from "@/lib/db";
@@ -6,15 +5,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { uploadImage, deleteImage } from "@/lib/s3";
 import { requireAdmin } from "@/lib/auth-guard";
-import { slugify } from "@/lib/utils"; // 👈 استفاده از ابزار استاندارد
-import { FormState } from "@/types"; // 👈 استفاده از تایپ مشترک
+import { slugify } from "@/lib/utils";
+import { FormState } from "@/types";
 
+// ۱. آپدیت اسکیما برای دریافت brandId
 const ProductSchema = z.object({
   name: z.string().min(2, "نام محصول باید حداقل ۲ حرف باشد."),
   description: z.string().optional(),
   price: z.coerce.number().min(0, "قیمت نمی‌تواند منفی باشد."),
   stock: z.coerce.number().int().min(0, "موجودی نمی‌تواند منفی باشد."),
   categoryId: z.string().min(1, "دسته‌بندی الزامی است."),
+  brandId: z.string().optional(), // 👈 اضافه شد (اختیاری)
   isAvailable: z.coerce.boolean(),
   image: z
     .instanceof(File, { message: "فایل نامعتبر است." })
@@ -30,9 +31,18 @@ const ProductSchema = z.object({
     }),
 });
 
-// ۱. ایجاد محصول
+// --- تابع کمکی برای مدیریت brandId ---
+// اگر مقدار "null" یا خالی بود، null برگرداند وگرنه خود ID را
+function parseBrandId(value: unknown): string | null {
+  if (typeof value === "string" && (value === "null" || value.trim() === "")) {
+    return null;
+  }
+  return value as string;
+}
+
+// ۲. ایجاد محصول
 export async function createProduct(
-  prevState: FormState, // 👈 تایپ اصلاح شد
+  prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
   try {
@@ -47,7 +57,8 @@ export async function createProduct(
     price: formData.get("price"),
     stock: formData.get("stock"),
     categoryId: formData.get("categoryId"),
-    isAvailable: formData.get("isAvailable") === "on", // چک باکس
+    brandId: formData.get("brandId"), // 👈 دریافت از فرم
+    isAvailable: formData.get("isAvailable") === "on",
     image: formData.get("image") as File,
   });
 
@@ -59,8 +70,16 @@ export async function createProduct(
     };
   }
 
-  const { name, description, price, stock, categoryId, isAvailable, image } =
-    validated.data;
+  const {
+    name,
+    description,
+    price,
+    stock,
+    categoryId,
+    brandId,
+    isAvailable,
+    image,
+  } = validated.data;
 
   let imageUrl: string | undefined;
 
@@ -69,7 +88,6 @@ export async function createProduct(
       imageUrl = await uploadImage(image, "products");
     }
 
-    // 👈 تولید اسلاگ یکتا با تابع استاندارد + عدد تصادفی برای جلوگیری از تکرار
     const uniqueSlug = `${slugify(name)}-${Date.now().toString().slice(-4)}`;
 
     await db.product.create({
@@ -77,9 +95,11 @@ export async function createProduct(
         name,
         slug: uniqueSlug,
         description,
-        price, // اینجا عدد پاس می‌دهیم و پریزما خودش به Decimal تبدیل می‌کند (برای Create اوکی است)
+        price,
         stock,
         categoryId,
+        // 👈 ذخیره برند (اگر null باشد ذخیره نمی‌شود یا null می‌شود)
+        brandId: parseBrandId(brandId),
         isAvailable,
         image: imageUrl || null,
         images: imageUrl ? [imageUrl] : [],
@@ -95,10 +115,10 @@ export async function createProduct(
   }
 }
 
-// ۲. ویرایش محصول
+// ۳. ویرایش محصول
 export async function updateProduct(
   id: string,
-  prevState: FormState, // 👈 تایپ اصلاح شد
+  prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
   try {
@@ -113,6 +133,7 @@ export async function updateProduct(
     price: formData.get("price"),
     stock: formData.get("stock"),
     categoryId: formData.get("categoryId"),
+    brandId: formData.get("brandId"), // 👈 دریافت از فرم
     isAvailable: formData.get("isAvailable") === "on",
     image: formData.get("image") as File,
   });
@@ -125,8 +146,16 @@ export async function updateProduct(
     };
   }
 
-  const { name, description, price, stock, categoryId, isAvailable, image } =
-    validated.data;
+  const {
+    name,
+    description,
+    price,
+    stock,
+    categoryId,
+    brandId,
+    isAvailable,
+    image,
+  } = validated.data;
 
   try {
     const product = await db.product.findUnique({ where: { id } });
@@ -136,13 +165,9 @@ export async function updateProduct(
       product.image ||
       (product.images.length > 0 ? product.images[0] : undefined);
 
-    // اگر عکس جدید آپلود شده بود
     if (image && image.size > 0 && image.name !== "undefined") {
       imageUrl = await uploadImage(image, "products");
-
-      // حذف عکس قبلی اگر وجود داشت
       if (product.images.length > 0) {
-        // خطا را نادیده می‌گیریم تا پروسه آپدیت متوقف نشود
         await deleteImage(product.images[0]).catch(console.error);
       }
     }
@@ -151,13 +176,11 @@ export async function updateProduct(
       where: { id },
       data: {
         name,
-        // نکته: معمولاً اسلاگ را در ویرایش تغییر نمی‌دهند تا لینک‌های سئو خراب نشود.
-        // اگر می‌خواهید تغییر کند، خط زیر را آنکامنت کنید:
-        // slug: slugify(name),
         description,
         price,
         stock,
         categoryId,
+        brandId: parseBrandId(brandId),
         isAvailable,
         image: imageUrl,
         images: imageUrl ? [imageUrl] : [],
@@ -173,7 +196,7 @@ export async function updateProduct(
   }
 }
 
-// ۳. حذف محصول
+// ۴. حذف محصول (بدون تغییر)
 export async function deleteProduct(productId: string) {
   try {
     await requireAdmin();
@@ -185,7 +208,6 @@ export async function deleteProduct(productId: string) {
     const product = await db.product.findUnique({ where: { id: productId } });
     if (!product) return { success: false, message: "محصول یافت نشد." };
 
-    // تلاش برای حذف عکس‌ها از S3
     if (product.images && product.images.length > 0) {
       for (const img of product.images) {
         await deleteImage(img).catch((err) =>

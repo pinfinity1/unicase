@@ -17,13 +17,12 @@ import {
 import { Loader2, UploadCloud } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
-// 👇 ایمپورت تایپ‌های صحیح
-import { Category } from "@prisma/client";
+import { Category, Brand } from "@prisma/client";
 import { FormState, ProductClient } from "@/types";
 
 interface ProductFormProps {
-  // 👇 اصلاح تایپ: به جای any[] از تایپ واقعی دیتابیس استفاده می‌کنیم
   categories: Category[];
+  brands: Brand[];
   initialData?: ProductClient | null;
   onSuccess?: () => void;
 }
@@ -36,6 +35,7 @@ const initialState: FormState = {
 
 export function ProductForm({
   categories,
+  brands,
   initialData,
   onSuccess,
 }: ProductFormProps) {
@@ -43,7 +43,6 @@ export function ProductForm({
     ? updateProduct.bind(null, initialData.id)
     : null;
 
-  // 👇 استفاده از جنریک برای تایپ‌سیف کردن هوک
   const [state, formAction, isPending] = useActionState<FormState, FormData>(
     initialData && updateProductWithId ? updateProductWithId : createProduct,
     initialState
@@ -77,6 +76,7 @@ export function ProductForm({
 
   return (
     <form action={formAction} className="space-y-6 py-4">
+      {/* بخش تصویر */}
       <div className="space-y-2">
         <Label>تصویر محصول</Label>
         <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-4 relative overflow-hidden h-40">
@@ -116,13 +116,14 @@ export function ProductForm({
             defaultValue={initialData?.name}
             placeholder="نام محصول"
           />
-          {/* 👇 نمایش صحیح ارورهای آرایه‌ای */}
           {state.errors?.name && (
             <p className="text-red-500 text-xs">
               {state.errors.name.join(", ")}
             </p>
           )}
         </div>
+
+        {/* بخش دسته‌بندی */}
         <div className="space-y-2">
           <Label>دسته‌بندی</Label>
           <Select
@@ -148,15 +149,32 @@ export function ProductForm({
         </div>
       </div>
 
+      {/* 👇 ۴. بخش انتخاب برند (جدید اضافه شده) */}
+      <div className="space-y-2">
+        <Label>برند (اختیاری)</Label>
+        <Select
+          name="brandId" // نام فیلد برای ارسال به سرور
+          defaultValue={initialData?.brandId || "null"} // مقدار اولیه
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="انتخاب برند..." />
+          </SelectTrigger>
+          <SelectContent>
+            {/* گزینه برای زمانی که محصول برند ندارد */}
+            <SelectItem value="null">بدون برند</SelectItem>
+            {brands.map((b) => (
+              <SelectItem key={b.id} value={b.id}>
+                {b.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label>قیمت (تومان)</Label>
-          <Input
-            name="price"
-            type="number"
-            // 👇 چون ProductClient استفاده می‌کنیم، price الان number است و نیازی به کست ندارد
-            defaultValue={initialData?.price}
-          />
+          <Input name="price" type="number" defaultValue={initialData?.price} />
           {state.errors?.price && (
             <p className="text-red-500 text-xs">
               {state.errors.price.join(", ")}
