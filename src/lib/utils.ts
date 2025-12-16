@@ -18,6 +18,10 @@ export function slugify(text: string): string {
     .replace(/-+$/, ""); // حذف خط تیره از آخر
 }
 
+export function formatPrice(price: number | string) {
+  return new Intl.NumberFormat("fa-IR").format(Number(price));
+}
+
 export function serializeProduct(product: ProductWithCategory): ProductClient {
   return {
     ...product,

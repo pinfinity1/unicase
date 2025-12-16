@@ -1,3 +1,5 @@
+import { GenerateFeaturedButton } from "@/components/admin/products/generate-featured-button";
+import { GenerateLuckyButton } from "@/components/admin/products/generate-lucky-button";
 import { ProductFormWrapper } from "@/components/admin/products/product-form-wrapper";
 import { ProductList } from "@/components/admin/products/product-list";
 import { db } from "@/lib/db";
@@ -10,8 +12,7 @@ export default async function ProductsPage() {
 
   return (
     <div className="space-y-8">
-      {/* هدر صفحه: تیتر سمت راست، دکمه افزودن سمت چپ */}
-      <div className="flex items-center justify-between border-b pb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">مدیریت محصولات</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -19,11 +20,15 @@ export default async function ProductsPage() {
           </p>
         </div>
 
-        {/* دکمه که فرم را باز می‌کند */}
-        <ProductFormWrapper categories={categories} />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <GenerateLuckyButton />
+
+          <GenerateFeaturedButton />
+
+          <ProductFormWrapper categories={categories} />
+        </div>
       </div>
 
-      {/* لیست محصولات (که الان تمام صفحه را گرفته و زیباست) */}
       <ProductList />
     </div>
   );
