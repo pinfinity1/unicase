@@ -81,7 +81,7 @@ export default async function ProductPage(props: ProductPageProps) {
   const formattedPrice = new Intl.NumberFormat("fa-IR").format(product.price);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen">
       {/* ۲. تزریق اسکیما برای گوگل */}
       <ProductJsonLd product={product} />
 

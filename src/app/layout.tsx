@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: "%s | UniCase",
     default: "UniCase | دنیای قاب و اکسسوری خاص",
   },
-  description: "مرجع تخصصی خرید جدیدترین قاب‌های گوشی و گجت‌های ترند",
+  description: "مرجع تخصصی خرید جدیدترین قاب‌های گوشی",
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="fa" dir="rtl">
       <body
-        className={`${vazir.variable} font-sans antialiased bg-background text-foreground `}
+        className={`${vazir.variable} font-sans antialiased bg-gray-50 text-foreground`}
       >
         <Providers>
           {children}
