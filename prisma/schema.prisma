@@ -135,11 +135,14 @@ model Order {
   address        String
   city           String
   postalCode     String
-  
-  paymentAuthority String?   @unique
-  paymentRefId     String?
 
   items       OrderItem[]
+  payments    Payment[]
+
+  shippingMethodId String?
+  shippingMethod   ShippingMethod? @relation(fields: [shippingMethodId], references: [id])
+  
+  shippingCost     Decimal @default(0) @db.Decimal(10, 2)
   
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -155,4 +158,42 @@ model OrderItem {
   
   quantity  Int
   price     Decimal @db.Decimal(10, 2)
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  amount        Decimal  @db.Decimal(10, 2)
+  status        PaymentStatus @default(PENDING) // اینام جدید پایین تعریف شده
+  
+  authority     String   @unique // شناسه ارسالی به بانک
+  refId         String?  // کد پیگیری بازگشتی از بانک (فقط در صورت موفقیت)
+  gateway       String   @default("ZARINPAL")
+  
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  errorMessage  String?  // ذخیره متن خطا اگر بانک خطا داد
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// 🆕 وضعیت‌های پرداخت (جدا از وضعیت سفارش)
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}  
+
+model ShippingMethod {
+  id          String   @id @default(cuid())
+  name        String   // مثلا: پست پیشتاز
+  description String?  // مثلا: تحویل ۲ تا ۴ روز کاری
+  cost        Decimal  @db.Decimal(10, 2) // هزینه ارسال
+  isActive    Boolean  @default(true)
+  
+  orders      Order[]  // ارتباط با سفارش‌ها
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

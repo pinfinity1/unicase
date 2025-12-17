@@ -3,6 +3,7 @@ import { Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
+import { GlassEffects } from "@/components/ui/glass-effects";
 
 const vazir = Vazirmatn({
   subsets: ["arabic"],
@@ -30,6 +31,7 @@ export default function RootLayout({
       >
         <Providers>
           {children}
+          <GlassEffects />
           <Toaster
             richColors
             position="top-center"
