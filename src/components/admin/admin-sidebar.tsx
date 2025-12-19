@@ -13,13 +13,17 @@ import {
   Users,
   Settings,
   LogOut,
+  Tag,
+  Truck,
 } from "lucide-react";
 
 const menuItems = [
   { title: "داشبورد", href: "/admin", icon: LayoutDashboard },
   { title: "محصولات", href: "/admin/products", icon: Package },
   { title: "دسته‌بندی‌ها", href: "/admin/categories", icon: Layers },
+  { title: "برندها", href: "/admin/brands", icon: Tag },
   { title: "سفارش‌ها", href: "/admin/orders", icon: ShoppingBag },
+  { title: "روش‌های ارسال", href: "/admin/shipping", icon: Truck },
   { title: "کاربران", href: "/admin/users", icon: Users },
   { title: "تنظیمات", href: "/admin/settings", icon: Settings },
 ];

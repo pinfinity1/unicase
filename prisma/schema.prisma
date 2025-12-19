@@ -21,7 +21,10 @@ model User {
   
   orders      Order[]
   cart        Cart?
-  
+
+  addresses   Address[]
+  wishlist    Wishlist[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -39,16 +42,16 @@ model Category {
 }
 
 model Brand {
-  id          String    @id @default(cuid())
-  name        String
-  nameEn      String?
-  slug        String    @unique
-  logo        String?
+  id        String    @id @default(cuid())
+  name      String
+  nameEn    String?
+  slug      String    @unique
+  logo      String?
   
-  products    Product[]
+  products  Product[]
   
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Product {
@@ -77,6 +80,7 @@ model Product {
   
   cartItems     CartItem[]
   orderItems    OrderItem[]
+  wishlists     Wishlist[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -109,9 +113,6 @@ model CartItem {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   quantity  Int      @default(1)
-
-  // ما قیمت رو اینجا ذخیره نمیکنیم، چون قیمت باید همیشه از پروداکت اصلی خونده بشه
-  // تا اگر ادمین قیمت رو عوض کرد، سبد خرید هم آپدیت باشه.
 }
 
 
@@ -132,8 +133,11 @@ model Order {
   
   recipientName  String
   recipientPhone String
-  address        String
+  
+  // 👇 پیشنهاد: بهتر است این فیلدها را با مدل Address هماهنگ کنید
+  province       String? // اضافه شده برای هماهنگی با فرم
   city           String
+  address        String  // یا fullAddress
   postalCode     String
 
   items       OrderItem[]
@@ -160,40 +164,74 @@ model OrderItem {
   price     Decimal @db.Decimal(10, 2)
 }
 
-model Payment {
-  id            String   @id @default(cuid())
-  amount        Decimal  @db.Decimal(10, 2)
-  status        PaymentStatus @default(PENDING) // اینام جدید پایین تعریف شده
-  
-  authority     String   @unique // شناسه ارسالی به بانک
-  refId         String?  // کد پیگیری بازگشتی از بانک (فقط در صورت موفقیت)
-  gateway       String   @default("ZARINPAL")
-  
-  orderId       String
-  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  errorMessage  String?  // ذخیره متن خطا اگر بانک خطا داد
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-// 🆕 وضعیت‌های پرداخت (جدا از وضعیت سفارش)
 enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
 }  
 
+model Payment {
+  id            String    @id @default(cuid())
+  amount        Decimal   @db.Decimal(10, 2)
+  status        PaymentStatus @default(PENDING)
+  
+  authority     String    @unique // شناسه ارسالی به بانک
+  refId         String?   // کد پیگیری بازگشتی از بانک
+  gateway       String    @default("ZARINPAL")
+  
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  errorMessage  String?   // ذخیره متن خطا اگر بانک خطا داد
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model ShippingMethod {
   id          String   @id @default(cuid())
   name        String   // مثلا: پست پیشتاز
   description String?  // مثلا: تحویل ۲ تا ۴ روز کاری
-  cost        Decimal  @db.Decimal(10, 2) // هزینه ارسال
+  
+  // 👇 تغییر انجام شد: cost تبدیل شد به price
+  price       Decimal  @db.Decimal(10, 2) 
+  
   isActive    Boolean  @default(true)
   
   orders      Order[]  // ارتباط با سفارش‌ها
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Address {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title          String    // مثلا: خانه، محل کار
+  recipientName  String
+  recipientPhone String
+  province       String    // استان
+  city           String
+  fullAddress    String
+  postalCode     String
+  
+  isDefault      Boolean   @default(false)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Wishlist {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, productId])
 }

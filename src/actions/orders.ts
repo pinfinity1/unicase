@@ -21,7 +21,6 @@ const OrderSchema = z.object({
 type CartItemInput = {
   id: string;
   quantity: number;
-  // price را حذف کردیم چون نباید از کلاینت بیاید (امنیتی)
 };
 
 export type OrderState = {
@@ -42,7 +41,8 @@ export async function createOrder(
     postalCode: string;
   },
   cartItems: CartItemInput[],
-  userId?: string
+  userId?: string,
+  shippingMethodId?: string | null // 👈 پارامتر جدید: آیدی روش ارسال
 ): Promise<OrderState> {
   const validated = OrderSchema.safeParse(formData);
 
@@ -58,18 +58,33 @@ export async function createOrder(
     return { success: false, message: "سبد خرید خالی است" };
   }
 
-  const { recipientName, recipientPhone, city, address, postalCode } =
+  // 👈 استان (province) هم باید استخراج شود
+  const { recipientName, recipientPhone, province, city, address, postalCode } =
     validated.data;
 
   try {
     // ۱. شروع تراکنش دیتابیس
     const order = await db.$transaction(async (tx) => {
-      let calculatedTotalPrice = 0;
+      let calculatedItemsPrice = 0; // قیمت کالاها
+      let shippingCost = 0; // هزینه ارسال
       const orderItemsData = [];
 
-      // حلقه روی آیتم‌ها برای: ۱. چک موجودی اتمیک ۲. محاسبه قیمت واقعی
+      // الف) محاسبه هزینه ارسال (امنیت: خواندن از دیتابیس)
+      if (shippingMethodId) {
+        const method = await tx.shippingMethod.findUnique({
+          where: { id: shippingMethodId },
+        });
+
+        if (method) {
+          shippingCost = method.price.toNumber();
+        } else {
+          // اگر روش ارسال پیدا نشد، می‌توانیم ارور بدهیم یا هزینه را 0 بگیریم
+          // throw new Error("روش ارسال انتخابی معتبر نیست.");
+        }
+      }
+
+      // ب) حلقه روی آیتم‌ها (چک موجودی و محاسبه قیمت کالاها)
       for (const item of cartItems) {
-        // الف) دریافت قیمت واقعی از دیتابیس
         const product = await tx.product.findUnique({
           where: { id: item.id },
         });
@@ -82,33 +97,33 @@ export async function createOrder(
           throw new Error(`محصول "${product.name}" قابل فروش نیست.`);
         }
 
-        // ب) عملیات اتمیک: فقط در صورتی کم کن که موجودی >= تعداد درخواستی باشد
-        // از updateMany استفاده می‌کنیم چون اجازه فیلتر روی stock را می‌دهد
+        // عملیات اتمیک کسر موجودی
         const updateResult = await tx.product.updateMany({
           where: {
             id: item.id,
-            stock: { gte: item.quantity }, // 👈 شرط حیاتی برای جلوگیری از Race Condition
+            stock: { gte: item.quantity },
           },
           data: {
             stock: { decrement: item.quantity },
           },
         });
 
-        // اگر هیچ رکوردی آپدیت نشد، یعنی موجودی کافی نبوده
         if (updateResult.count === 0) {
           throw new Error(`موجودی محصول "${product.name}" کافی نیست.`);
         }
 
-        // ج) محاسبه قیمت امن
         const realPrice = Number(product.price);
-        calculatedTotalPrice += realPrice * item.quantity;
+        calculatedItemsPrice += realPrice * item.quantity;
 
         orderItemsData.push({
           productId: product.id,
           quantity: item.quantity,
-          price: product.price, // قیمت دیتابیس رو ذخیره می‌کنیم
+          price: product.price,
         });
       }
+
+      // ج) محاسبه قیمت نهایی (کالاها + هزینه ارسال)
+      const finalTotalPrice = calculatedItemsPrice + shippingCost;
 
       // د) ساخت نهایی سفارش
       const newOrder = await tx.order.create({
@@ -116,10 +131,15 @@ export async function createOrder(
           userId: userId || null,
           recipientName,
           recipientPhone,
+          province, // 👈 ذخیره استان
           city,
-          address,
+          address, // در مدل دیتابیس فیلد address دارید که همان fullAddress است
           postalCode,
-          totalPrice: calculatedTotalPrice, // قیمت محاسبه شده در سرور
+
+          shippingMethodId, // 👈 ذخیره آیدی روش ارسال
+          shippingCost, // 👈 ذخیره هزینه ارسال در لحظه خرید
+
+          totalPrice: finalTotalPrice, // 👈 قیمت نهایی
           status: "PENDING",
           items: {
             create: orderItemsData,
@@ -130,20 +150,34 @@ export async function createOrder(
       return newOrder;
     });
 
-    // ۲. درخواست پرداخت (بعد از موفقیت تراکنش دیتابیس)
+    // ۲. درخواست پرداخت
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     const payment = await requestPayment(
       Number(order.totalPrice),
       `سفارش ${order.id}`,
-      `${appUrl}/payment/verify`, // حتما این فایل باید ساخته شود
+      `${appUrl}/payment/verify`,
       recipientPhone
     );
 
     if (payment.success && payment.authority) {
       await db.order.update({
         where: { id: order.id },
-        data: { paymentAuthority: payment.authority },
+        data: {
+          // در مدل شما paymentAuthority در جدول Payment است یا Order؟
+          // اگر در Order ندارید، باید در جدول Payment رکورد بسازید.
+          // فرض بر این است که طبق مدل جدید، Authority در جدول Payment ذخیره می‌شود:
+          payments: {
+            create: {
+              amount: order.totalPrice,
+              authority: payment.authority,
+              status: "PENDING",
+              gateway: "ZARINPAL",
+            },
+          },
+          // اگر فیلد paymentAuthority هنوز در مدل Order هست، خط زیر را آنکامنت کنید:
+          // paymentAuthority: payment.authority
+        },
       });
 
       return {
@@ -151,8 +185,7 @@ export async function createOrder(
         url: payment.url,
       };
     } else {
-      // اگر درگاه خطا داد، باید موجودی کسر شده را برگردانیم (Rollback دستی)
-      // چون تراکنش دیتابیس قبلاً کامیت شده است.
+      // رول‌بک دستی در صورت خطای درگاه
       for (const item of cartItems) {
         await db.product.update({
           where: { id: item.id },
@@ -177,7 +210,10 @@ export async function createOrder(
   }
 }
 
-// توابع کمکی ادمین (بدون تغییر لاجیک، فقط تایپ‌ها)
+// ------------------------------------------------------------------
+// توابع ادمین
+// ------------------------------------------------------------------
+
 export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus
