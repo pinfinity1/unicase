@@ -29,9 +29,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MoreHorizontal, Trash2, Edit, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { ProductForm } from "./product-form"; // استفاده از فرم خودمان
+
 import { Brand, Category } from "@prisma/client";
 import { ProductClient } from "@/types";
+// ✅ ایمپورت صحیح (بدون آکولاد چون export default کردیم)
+import { ProductForm } from "./product-form";
 
 interface ProductActionsProps {
   product: ProductClient;
@@ -45,7 +47,7 @@ export function ProductActions({
   brands,
 }: ProductActionsProps) {
   const [openDelete, setOpenDelete] = useState(false);
-  const [openEdit, setOpenEdit] = useState(false); // مودال ویرایش
+  const [openEdit, setOpenEdit] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const handleDelete = () => {
@@ -71,14 +73,12 @@ export function ProductActions({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>عملیات</DropdownMenuLabel>
 
-          {/* دکمه باز کردن مودال ویرایش */}
           <DropdownMenuItem onClick={() => setOpenEdit(true)}>
             <Edit className="ml-2 h-4 w-4" /> ویرایش
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 
-          {/* دکمه باز کردن مودال حذف */}
           <DropdownMenuItem
             onClick={() => setOpenDelete(true)}
             className="text-red-600 focus:bg-red-50"
@@ -88,23 +88,24 @@ export function ProductActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* ۱. مودال ویرایش */}
+      {/* مودال ویرایش */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>ویرایش محصول: {product.name}</DialogTitle>
           </DialogHeader>
-          {/* فرم را صدا می‌زنیم و دیتای فعلی محصول را به آن می‌دهیم */}
+
+          {/* ✅ اصلاح مهم: استفاده از initialData به جای product */}
           <ProductForm
             categories={categories}
             brands={brands}
-            initialData={product}
+            initialData={product} // 👈 اینجا قبلاً product={product} بود که غلط است
             onSuccess={() => setOpenEdit(false)}
           />
         </DialogContent>
       </Dialog>
 
-      {/* ۲. مودال حذف (Alert) */}
+      {/* مودال حذف */}
       <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>

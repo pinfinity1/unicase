@@ -1,148 +1,173 @@
-import { db } from "@/lib/db";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import Image from "next/image";
-import { ImageIcon, Archive, CheckCircle2, XCircle } from "lucide-react";
-import { ProductActions } from "./product-actions";
-import { serializeProduct } from "@/lib/utils";
+// src/components/admin/products/product-list.tsx
 
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("fa-IR").format(price);
-};
+import { db } from "@/lib/db";
+import { formatPrice } from "@/lib/utils";
+import { ProductClient } from "@/types";
+import Image from "next/image";
+import { Prisma, ProductVariant } from "@prisma/client";
+import { ProductActions } from "./product-actions";
+
+// ۱. تعریف تایپ دقیق برای دیتای خام ورودی از Prisma
+type ProductWithRelations = Prisma.ProductGetPayload<{
+  include: {
+    category: true;
+    brand: true;
+    variants: true;
+  };
+}>;
 
 export async function ProductList() {
-  const rawProducts = await db.product.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { category: true, brand: true },
-  });
-  const categories = await db.category.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  // دریافت موازی داده‌ها برای پرفورمنس بالاتر
+  const [rawProducts, categories, brands] = await Promise.all([
+    db.product.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        category: true,
+        brand: true,
+        variants: true,
+      },
+    }),
+    db.category.findMany({ orderBy: { name: "asc" } }),
+    db.brand.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
-  const brands = await db.brand.findMany({
-    orderBy: { name: "asc" },
-  });
+  // ۲. تبدیل دیتا به فرمت کلاینت با تایپ‌بندی صریح
+  // ما از ProductClient استفاده می‌کنیم تا مطمئن شویم داده‌ها برای کامپوننت‌های کلاینت قابل فهم هستند
+  const products: ProductClient[] = rawProducts.map((p) => ({
+    ...p,
+    price: p.price.toNumber(),
+    discountPrice: p.discountPrice ? p.discountPrice.toNumber() : null,
 
-  // تبدیل دیتای خام
-  const products = rawProducts.map((product) => serializeProduct(product));
+    // تبدیل تک‌تک واریانت‌ها
+    variants: p.variants.map((v) => ({
+      ...v,
+      priceDiff: v.priceDiff ? v.priceDiff.toNumber() : 0,
+      createdAt: v.createdAt.toISOString(),
+      updatedAt: v.updatedAt.toISOString(),
+    })),
+
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }));
 
   if (products.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-4xl border border-white/60 bg-white/40 backdrop-blur-xl p-12 text-center shadow-sm">
-        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-sm text-gray-300 mb-4">
-          <ImageIcon className="h-10 w-10" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-900">محصولی یافت نشد</h3>
-        <p className="text-sm text-gray-500 mt-2">
-          هنوز محصولی اضافه نکرده‌اید.
-        </p>
+      <div className="text-center py-20 bg-white/50 backdrop-blur rounded-3xl border border-white/20">
+        <p className="text-gray-500">هنوز محصولی ثبت نشده است.</p>
       </div>
     );
   }
 
   return (
-    // ✨ کانتینر شیشه‌ای اصلی
-    <div className="rounded-4xl border border-white/60 bg-white/60 backdrop-blur-2xl shadow-xl shadow-gray-200/50 overflow-hidden">
-      <Table>
-        <TableHeader className="bg-gray-50/50">
-          <TableRow className="border-b border-gray-200/50 hover:bg-transparent">
-            <TableHead className="w-24 text-right pr-6">تصویر</TableHead>
-            <TableHead className="text-right font-bold text-gray-600">
-              نام محصول
-            </TableHead>
-            <TableHead className="text-right text-gray-600">
-              دسته‌بندی
-            </TableHead>
-            <TableHead className="text-right text-gray-600">قیمت</TableHead>
-            <TableHead className="text-center text-gray-600">موجودی</TableHead>
-            <TableHead className="text-center text-gray-600">وضعیت</TableHead>
-            <TableHead className="w-16"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {products.map((product) => (
-            <TableRow
-              key={product.id}
-              className="border-b border-gray-100/50 hover:bg-white/60 transition-colors group"
-            >
-              {/* تصویر با استایل iOS Icon */}
-              <TableCell className="pr-6">
-                <div className="relative h-14 w-14 rounded-2xl overflow-hidden border border-white shadow-sm bg-gray-100">
-                  {product.images && product.images.length > 0 ? (
-                    <Image
-                      src={product.images[0]}
-                      alt={product.name}
-                      fill
-                      className="object-cover transition-transform group-hover:scale-110 duration-500"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-gray-400">
-                      <ImageIcon className="h-5 w-5" />
-                    </div>
-                  )}
-                </div>
-              </TableCell>
-
-              <TableCell className="font-bold text-gray-800 text-base">
-                {product.name}
-              </TableCell>
-
-              <TableCell>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white border border-gray-100 text-xs font-medium text-gray-600 shadow-sm">
-                  {product.category.name}
-                </span>
-              </TableCell>
-
-              <TableCell className="font-mono font-bold text-gray-900 text-base">
-                {formatPrice(product.price)}{" "}
-                <span className="text-[10px] text-gray-400 font-sans font-normal">
-                  تومان
-                </span>
-              </TableCell>
-
-              <TableCell className="text-center">
-                {product.stock > 0 ? (
-                  <span className="font-mono text-gray-700 bg-gray-100 px-3 py-1 rounded-full text-sm">
-                    {product.stock.toLocaleString("fa")}
-                  </span>
-                ) : (
-                  <span className="text-red-500 text-xs font-bold bg-red-50 px-2 py-1 rounded-full">
-                    تمام شد
-                  </span>
-                )}
-              </TableCell>
-
-              <TableCell className="text-center">
-                {product.isAvailable ? (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-bold border border-green-100">
-                    <CheckCircle2 className="h-3 w-3" />
-                    فعال
+    <div className="glass-prism rounded-3xl overflow-hidden border border-white/20 shadow-xl bg-white/40 backdrop-blur-md">
+      <div className="overflow-x-auto">
+        <table className="w-full text-right" dir="rtl">
+          <thead className="bg-white/60 text-gray-700 font-bold border-b border-gray-200/50">
+            <tr>
+              <th className="p-4 text-right">تصویر</th>
+              <th className="p-4 text-right">نام محصول</th>
+              <th className="p-4 text-right">دسته‌بندی / برند</th>
+              <th className="p-4 text-right">قیمت</th>
+              <th className="p-4 text-right">موجودی (تنوع)</th>
+              <th className="p-4 text-right">وضعیت</th>
+              <th className="p-4 text-left">عملیات</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100/50">
+            {products.map((product) => (
+              <tr key={product.id} className="hover:bg-white/40 transition">
+                <td className="p-4">
+                  <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-white shadow-sm">
+                    {product.image ? (
+                      <Image
+                        src={product.image}
+                        alt={product.name}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-400">
+                        بدون تصویر
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-bold border border-gray-200">
-                    <Archive className="h-3 w-3" />
-                    بایگانی
-                  </div>
-                )}
-              </TableCell>
+                </td>
 
-              <TableCell>
-                <ProductActions
-                  product={product}
-                  categories={categories}
-                  brands={brands}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                <td className="p-4 font-medium text-gray-800">
+                  {product.name}
+                </td>
+
+                <td className="p-4 text-sm text-gray-600">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold">
+                      {product.category.name}
+                    </span>
+                    {product.brand && (
+                      <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                        {product.brand.name}
+                      </span>
+                    )}
+                  </div>
+                </td>
+
+                <td className="p-4 text-sm font-mono">
+                  {formatPrice(product.price)}
+                </td>
+
+                <td className="p-4">
+                  <div className="flex flex-wrap gap-1 max-w-[200px]">
+                    {product.variants && product.variants.length > 0 ? (
+                      product.variants.slice(0, 3).map((v, i) => (
+                        <span
+                          key={i}
+                          className="text-[10px] px-2 py-1 rounded border bg-white/80 border-gray-200 flex items-center gap-1"
+                          title={`موجودی: ${v.stock}`}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full border border-gray-300"
+                            style={{ backgroundColor: v.colorCode || "#ddd" }}
+                          />
+                          {v.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-red-500">بدون تنوع</span>
+                    )}
+                    {product.variants && product.variants.length > 3 && (
+                      <span className="text-[10px] px-1 py-1 text-gray-400">
+                        +{product.variants.length - 3}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    مجموع موجودی: {product.stock}
+                  </div>
+                </td>
+
+                <td className="p-4">
+                  <span
+                    className={`px-3 py-1 rounded-full text-[10px] font-medium ${
+                      product.isAvailable
+                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        : "bg-gray-100 text-gray-500 border border-gray-200"
+                    }`}
+                  >
+                    {product.isAvailable ? "فعال" : "ناموجود"}
+                  </span>
+                </td>
+
+                <td className="p-4 text-left">
+                  <ProductActions
+                    product={product}
+                    categories={categories}
+                    brands={brands}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

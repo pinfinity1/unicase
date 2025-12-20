@@ -60,17 +60,19 @@ model Product {
   nameEn        String?
   slug          String   @unique
   description   String?
+  
   price         Decimal  @db.Decimal(10, 2)
   discountPrice Decimal? @db.Decimal(10, 2)
+
+  images        String[] 
   
-  image         String?
-  images        String[]
-  colors        String[]
+  image         String?  
+
+  stock         Int      @default(0) 
 
   isFeatured    Boolean  @default(false)
   isAvailable   Boolean  @default(true)
   isArchived    Boolean  @default(false)
-  stock         Int      @default(0)
 
   categoryId    String
   category      Category @relation(fields: [categoryId], references: [id])
@@ -78,12 +80,29 @@ model Product {
   brandId       String?
   brand         Brand?   @relation(fields: [brandId], references: [id])
   
+  variants      ProductVariant[]
+
   cartItems     CartItem[]
   orderItems    OrderItem[]
   wishlists     Wishlist[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  name      String   // مثلا: سرمه ای
+  colorCode String?  // مثلا: #20245b
+  stock     Int      @default(0)
+  priceDiff Decimal? @db.Decimal(10, 2)
+  imageUrl  String?  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 

@@ -8,114 +8,117 @@ import { requireAdmin } from "@/lib/auth-guard";
 import { slugify } from "@/lib/utils";
 import { FormState } from "@/types";
 
-// ۱. آپدیت اسکیما برای دریافت brandId
-const ProductSchema = z.object({
-  name: z.string().min(2, "نام محصول باید حداقل ۲ حرف باشد."),
-  description: z.string().optional(),
-  price: z.coerce.number().min(0, "قیمت نمی‌تواند منفی باشد."),
-  stock: z.coerce.number().int().min(0, "موجودی نمی‌تواند منفی باشد."),
-  categoryId: z.string().min(1, "دسته‌بندی الزامی است."),
-  brandId: z.string().optional(), // 👈 اضافه شد (اختیاری)
-  isAvailable: z.coerce.boolean(),
-  image: z
-    .instanceof(File, { message: "فایل نامعتبر است." })
-    .optional()
-    .refine(
-      (file) => !file || file.size === 0 || file.type.startsWith("image/"),
-      {
-        message: "فقط فایل‌های تصویری مجاز هستند.",
-      }
-    )
-    .refine((file) => !file || file.size <= 5 * 1024 * 1024, {
-      message: "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.",
-    }),
-});
-
-// --- تابع کمکی برای مدیریت brandId ---
-// اگر مقدار "null" یا خالی بود، null برگرداند وگرنه خود ID را
-function parseBrandId(value: unknown): string | null {
-  if (typeof value === "string" && (value === "null" || value.trim() === "")) {
-    return null;
-  }
-  return value as string;
+// ۱. تعریف اینترفیس برای واریانت جهت جلوگیری از any
+interface Variant {
+  name: string;
+  colorCode: string;
+  stock: number;
+  priceDiff: number;
+  imageUrl: string | null;
 }
 
-// ۲. ایجاد محصول
+const ProductSchema = z.object({
+  name: z.string().min(2, "نام محصول الزامی است"),
+  description: z.string().optional(),
+  price: z.coerce.number().min(0, "قیمت نمی‌تواند منفی باشد"),
+  categoryId: z.string().min(1, "انتخاب دسته‌بندی الزامی است"),
+  brandId: z.string().optional().nullable(),
+  isAvailable: z.coerce.boolean(),
+});
+
+// ۲. اصلاح تابع کمکی با تایپ خروجی مشخص
+function processVariants(
+  variantsJson: string,
+  finalImages: string[]
+): Variant[] {
+  try {
+    const parsed = JSON.parse(variantsJson);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.map((v: any) => ({
+      name: String(v.name || ""),
+      colorCode: String(v.colorCode || "#000000"),
+      stock: Number(v.stock || 0),
+      priceDiff: Number(v.priceDiff || 0),
+      imageUrl:
+        v.imageIndex !== null && v.imageIndex !== undefined
+          ? finalImages[v.imageIndex]
+          : null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// =========================================================
+// ایجاد محصول جدید
+// =========================================================
 export async function createProduct(
   prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
   try {
     await requireAdmin();
-  } catch (error) {
-    return { success: false, message: "دسترسی غیرمجاز: شما ادمین نیستید." };
-  }
 
-  const validated = ProductSchema.safeParse({
-    name: formData.get("name"),
-    description: formData.get("description"),
-    price: formData.get("price"),
-    stock: formData.get("stock"),
-    categoryId: formData.get("categoryId"),
-    brandId: formData.get("brandId"), // 👈 دریافت از فرم
-    isAvailable: formData.get("isAvailable") === "on",
-    image: formData.get("image") as File,
-  });
+    // نکته: Object.fromEntries فقط اولین مقدار هر کلید را می‌گیرد
+    const rawData = Object.fromEntries(formData.entries());
+    const validated = ProductSchema.safeParse(rawData);
 
-  if (!validated.success) {
-    return {
-      errors: validated.error.flatten().fieldErrors,
-      success: false,
-      message: "لطفاً ورودی‌ها را بررسی کنید.",
-    };
-  }
+    if (!validated.success)
+      return {
+        success: false,
+        message: "خطا در ورودی‌ها",
+        errors: validated.error.flatten().fieldErrors,
+      };
 
-  const {
-    name,
-    description,
-    price,
-    stock,
-    categoryId,
-    brandId,
-    isAvailable,
-    image,
-  } = validated.data;
+    const imageFiles = formData.getAll("images") as File[];
+    const uploadedUrls = await Promise.all(
+      imageFiles
+        .filter((f) => f.size > 0)
+        .map((file) => uploadImage(file, "products"))
+    );
 
-  let imageUrl: string | undefined;
+    const variants = processVariants(
+      formData.get("variants") as string,
+      uploadedUrls
+    );
 
-  try {
-    if (image && image.size > 0) {
-      imageUrl = await uploadImage(image, "products");
-    }
+    // ۳. اصلاح خطا با تعیین تایپ acc و curr
+    const totalStock = variants.reduce(
+      (acc: number, curr: Variant) => acc + curr.stock,
+      0
+    );
 
-    const uniqueSlug = `${slugify(name)}-${Date.now().toString().slice(-4)}`;
-
-    await db.product.create({
-      data: {
-        name,
-        slug: uniqueSlug,
-        description,
-        price,
-        stock,
-        categoryId,
-        // 👈 ذخیره برند (اگر null باشد ذخیره نمی‌شود یا null می‌شود)
-        brandId: parseBrandId(brandId),
-        isAvailable,
-        image: imageUrl || null,
-        images: imageUrl ? [imageUrl] : [],
-      },
+    await db.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          ...validated.data,
+          brandId:
+            validated.data.brandId === "null" ? null : validated.data.brandId,
+          slug: `${slugify(validated.data.name)}-${Math.random()
+            .toString(36)
+            .slice(-4)}`,
+          stock: totalStock,
+          images: uploadedUrls,
+          image: uploadedUrls[0] || null,
+          variants: {
+            create: variants,
+          },
+        },
+      });
     });
 
     revalidatePath("/admin/products");
-    revalidatePath("/");
-    return { success: true, message: "محصول با موفقیت ایجاد شد." };
-  } catch (e) {
-    console.error("Create Product Error:", e);
-    return { success: false, message: "خطا در برقراری ارتباط با دیتابیس." };
+    return { success: true, message: "محصول با موفقیت ایجاد شد" };
+  } catch (error) {
+    console.error("Create Product Error:", error);
+    return { success: false, message: "خطای سرور در ایجاد محصول" };
   }
 }
 
-// ۳. ویرایش محصول
+// =========================================================
+// ویرایش محصول
+// =========================================================
 export async function updateProduct(
   id: string,
   prevState: FormState,
@@ -123,106 +126,94 @@ export async function updateProduct(
 ): Promise<FormState> {
   try {
     await requireAdmin();
-  } catch (error) {
-    return { success: false, message: "دسترسی غیرمجاز" };
-  }
 
-  const validated = ProductSchema.safeParse({
-    name: formData.get("name"),
-    description: formData.get("description"),
-    price: formData.get("price"),
-    stock: formData.get("stock"),
-    categoryId: formData.get("categoryId"),
-    brandId: formData.get("brandId"), // 👈 دریافت از فرم
-    isAvailable: formData.get("isAvailable") === "on",
-    image: formData.get("image") as File,
-  });
+    const rawData = Object.fromEntries(formData.entries());
+    const validated = ProductSchema.safeParse(rawData);
 
-  if (!validated.success) {
-    return {
-      errors: validated.error.flatten().fieldErrors,
-      success: false,
-      message: "خطا در اعتبارسنجی فرم.",
-    };
-  }
+    if (!validated.success)
+      return { success: false, message: "خطا در اعتبار سنجی" };
 
-  const {
-    name,
-    description,
-    price,
-    stock,
-    categoryId,
-    brandId,
-    isAvailable,
-    image,
-  } = validated.data;
+    const existingImages = JSON.parse(
+      (formData.get("existingImages") as string) || "[]"
+    ) as string[];
 
-  try {
-    const product = await db.product.findUnique({ where: { id } });
-    if (!product) return { success: false, message: "محصول پیدا نشد." };
+    const newImageFiles = formData.getAll("images") as File[];
+    const newUrls = await Promise.all(
+      newImageFiles
+        .filter((f) => f.size > 0)
+        .map((file) => uploadImage(file, "products"))
+    );
+    const finalImages = [...existingImages, ...newUrls];
 
-    let imageUrl =
-      product.image ||
-      (product.images.length > 0 ? product.images[0] : undefined);
+    const variants = processVariants(
+      formData.get("variants") as string,
+      finalImages
+    );
 
-    if (image && image.size > 0 && image.name !== "undefined") {
-      imageUrl = await uploadImage(image, "products");
-      if (product.images.length > 0) {
-        await deleteImage(product.images[0]).catch(console.error);
+    // ۴. اصلاح خطا در بخش ویرایش
+    const totalStock = variants.reduce(
+      (acc: number, curr: Variant) => acc + curr.stock,
+      0
+    );
+
+    await db.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          ...validated.data,
+          brandId:
+            validated.data.brandId === "null" ? null : validated.data.brandId,
+          stock: totalStock,
+          images: finalImages,
+          image: finalImages[0] || null,
+        },
+      });
+
+      // حذف و ایجاد مجدد واریانت‌ها برای حفظ سادگی و دقت
+      await tx.productVariant.deleteMany({ where: { productId: id } });
+
+      if (variants.length > 0) {
+        await tx.productVariant.createMany({
+          data: variants.map((v) => ({
+            name: v.name,
+            colorCode: v.colorCode,
+            stock: v.stock,
+            priceDiff: v.priceDiff,
+            imageUrl: v.imageUrl,
+            productId: id,
+          })),
+        });
       }
-    }
-
-    await db.product.update({
-      where: { id },
-      data: {
-        name,
-        description,
-        price,
-        stock,
-        categoryId,
-        brandId: parseBrandId(brandId),
-        isAvailable,
-        image: imageUrl,
-        images: imageUrl ? [imageUrl] : [],
-      },
     });
 
     revalidatePath("/admin/products");
-    revalidatePath("/");
-    return { success: true, message: "محصول ویرایش شد." };
+    return { success: true, message: "بروزرسانی با موفقیت انجام شد" };
   } catch (error) {
     console.error("Update Product Error:", error);
-    return { success: false, message: "خطا در ویرایش محصول." };
+    return { success: false, message: "خطا در بروزرسانی محصول" };
   }
 }
 
-// ۴. حذف محصول (بدون تغییر)
-export async function deleteProduct(productId: string) {
+// =========================================================
+// حذف محصول
+// =========================================================
+export async function deleteProduct(id: string) {
   try {
     await requireAdmin();
-  } catch (error) {
-    return { success: false, message: "دسترسی غیرمجاز" };
-  }
+    const product = await db.product.findUnique({ where: { id } });
 
-  try {
-    const product = await db.product.findUnique({ where: { id: productId } });
-    if (!product) return { success: false, message: "محصول یافت نشد." };
-
-    if (product.images && product.images.length > 0) {
-      for (const img of product.images) {
-        await deleteImage(img).catch((err) =>
-          console.error("Failed to delete image from S3:", err)
-        );
-      }
+    if (product?.images && product.images.length > 0) {
+      // حذف موازی برای پرفورمنس بالاتر
+      await Promise.all(
+        product.images.map((url) => deleteImage(url).catch(() => {}))
+      );
     }
 
-    await db.product.delete({ where: { id: productId } });
-
+    await db.product.delete({ where: { id } });
     revalidatePath("/admin/products");
-    revalidatePath("/");
-    return { success: true, message: "محصول حذف شد." };
+    return { success: true, message: "محصول و تصاویر آن حذف شدند" };
   } catch (error) {
     console.error("Delete Product Error:", error);
-    return { success: false, message: "خطا در حذف محصول." };
+    return { success: false, message: "خطا در حذف محصول" };
   }
 }

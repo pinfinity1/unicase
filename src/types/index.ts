@@ -1,19 +1,35 @@
-import { Brand, Category, Prisma } from "@prisma/client";
+// src/types/index.ts
+import { Brand, Category, Prisma, ProductVariant } from "@prisma/client";
 
-export type ProductWithCategory = Prisma.ProductGetPayload<{
+// ۱. تعریف واریانت برای سمت کلاینت (اعداد number و تاریخ‌ها string)
+export type ProductVariantClient = Omit<
+  ProductVariant,
+  "priceDiff" | "createdAt" | "updatedAt"
+> & {
+  priceDiff: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// ۲. تعریف ساختار دیتای خام که از پریزما می‌گیریم
+export type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     category: true;
+    variants: true;
+    brand: true;
   };
 }>;
 
+// ۳. تعریف محصول نهایی برای سمت کلاینت (کامپوننت‌های "use client")
 export type ProductClient = Omit<
-  ProductWithCategory,
-  "price" | "discountPrice"
+  ProductWithRelations,
+  "price" | "discountPrice" | "variants" | "createdAt" | "updatedAt"
 > & {
   price: number;
   discountPrice: number | null;
+  variants: ProductVariantClient[]; // استفاده از تایپ اصلاح شده در بالا
   category: Category;
-  brand: Brand | null; // 👈 اضافه شد (میتونه null باشه)
+  brand: Brand | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -26,6 +42,7 @@ export type FormState = {
   };
 };
 
+// سایر تایپ‌ها (بدون تغییر)...
 export type OrderWithDetails = Prisma.OrderGetPayload<{
   include: {
     user: true;
