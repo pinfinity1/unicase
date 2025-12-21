@@ -93,16 +93,8 @@
 @layer components {
   .glass-prism {
     @apply relative overflow-hidden;
-
-    /* رنگ خاکستری دودی بسیار ملایم 
-      bg-gray-200 با opacity 40% -> روی زمینه سفید یک سایه خاکستری ملیح میندازه
-    */
-    @apply bg-gray-200/40 border border-white/40 shadow-sm;
-
-    /* اتصال به موتور SVG */
-    backdrop-filter: url(#liquid-prism) blur(1px) saturate(180%); /* کمی بلور اضافه کردم که متن زیرش نرم‌تر بشه */
-
-    /* سایه داخلی سفید برای اینکه حس شیشه بودن بده */
+    @apply bg-gray-200/40 border border-white/60 shadow-sm;
+    backdrop-filter: url(#liquid-prism) blur(1px) saturate(180%);
     box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.05),
       inset 0 0 20px rgba(255, 255, 255, 0.3);
   }
