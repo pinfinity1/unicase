@@ -1,4 +1,4 @@
-import { ProductClient, ProductWithCategory } from "@/types";
+import { ProductClient } from "@/types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -18,8 +18,14 @@ export function slugify(text: string): string {
     .replace(/-+$/, ""); // حذف خط تیره از آخر
 }
 
-export function formatPrice(price: number | string) {
-  return new Intl.NumberFormat("fa-IR").format(Number(price));
+export function formatPrice(value: any): number {
+  if (typeof value === "number") return value;
+  if (!value) return 0;
+  return Number(value.toString());
+}
+
+export function toPlainObject<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
 }
 
 export function serializeProduct(product: any): ProductClient {

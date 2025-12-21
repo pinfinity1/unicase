@@ -254,3 +254,16 @@ model Wishlist {
 
   @@unique([userId, productId])
 }
+
+
+model SiteSettings {
+  id            Int      @id @default(1)
+  storeName     String   @default("UniCase")
+  contactPhone  String?
+  contactEmail  String?
+  address       String?  @db.Text
+  description   String?  @db.Text
+  instagramUrl  String?
+  telegramUrl   String?
+  updatedAt     DateTime @updatedAt
+}
