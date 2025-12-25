@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
@@ -9,12 +9,14 @@ import { addToCartAction } from "@/actions/cart";
 
 interface AddToCartButtonProps {
   productId: string;
+  variantId?: string; // 👈 اضافه شدن برای پشتیبانی از رنگ/مدل
   stock: number;
-  onSuccess?: () => void; // 👈 پراپ جدید
+  onSuccess?: () => void;
 }
 
 export function AddToCartButton({
   productId,
+  variantId,
   stock,
   onSuccess,
 }: AddToCartButtonProps) {
@@ -28,68 +30,48 @@ export function AddToCartButton({
 
     startTransition(async () => {
       try {
-        const res = await addToCartAction(productId);
+        // 👈 پاس دادن هر دو پارامتر به اکشن اصلاح شده
+        const res = await addToCartAction(productId, variantId);
 
         if (res.success) {
           setButtonState("success");
           toast.success(res.message);
-
-          // 👇 خبر دادن به والد برای تغییر وضعیت به کنترلر
-          if (onSuccess) {
-            // کمی تاخیر برای دیدن انیمیشن تیک سبز
-            setTimeout(() => {
-              onSuccess();
-            }, 1000);
-          }
+          if (onSuccess) setTimeout(onSuccess, 800);
         } else {
           setButtonState("error");
           toast.error(res.message);
         }
       } catch (error) {
         setButtonState("error");
-        toast.error("خطای ارتباط با سرور");
+        toast.error("خطای سیستمی");
       }
     });
   };
 
-  // ... (بقیه کدهای JSX بدون تغییر)
   return (
     <Button
       size="lg"
       onClick={handleAddToCart}
-      disabled={isPending || buttonState === "success"}
+      disabled={isPending || buttonState === "success" || stock <= 0}
       className={cn(
-        "w-full h-14 text-lg rounded-2xl gap-3 transition-all duration-300 transform active:scale-[0.98]",
-        buttonState === "success"
-          ? "bg-green-600 hover:bg-green-700 text-white shadow-green-200 shadow-lg"
-          : buttonState === "error"
-          ? "bg-red-600 hover:bg-red-700 text-white"
-          : "bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-200"
+        "w-full h-14 text-lg rounded-2xl gap-3 transition-all",
+        buttonState === "success" ? "bg-green-600" : "bg-gray-900"
       )}
     >
       {isPending ? (
-        <>
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="font-medium">در حال پردازش...</span>
-        </>
+        <Loader2 className="h-5 w-5 animate-spin" />
       ) : buttonState === "success" ? (
-        <>
-          <Check className="h-6 w-6 animate-in zoom-in duration-300" />
-          <span className="font-bold animate-in fade-in slide-in-from-bottom-2">
-            به سبد اضافه شد
-          </span>
-        </>
-      ) : buttonState === "error" ? (
-        <>
-          <X className="h-6 w-6" />
-          <span>خطا در ثبت</span>
-        </>
+        <Check className="h-6 w-6" />
       ) : (
-        <>
-          <ShoppingCart className="h-5 w-5 opacity-90" />
-          <span className="font-medium">افزودن به سبد خرید</span>
-        </>
+        <ShoppingCart className="h-5 w-5" />
       )}
+      <span>
+        {isPending
+          ? "در حال پردازش..."
+          : buttonState === "success"
+          ? "به سبد اضافه شد"
+          : "افزودن به سبد خرید"}
+      </span>
     </Button>
   );
 }

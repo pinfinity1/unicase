@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+
+# Repomix outputs
+repomix-output.txt
+repomix-output.xml
+repomix-output.md

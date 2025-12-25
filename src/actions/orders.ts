@@ -20,6 +20,7 @@ const OrderSchema = z.object({
 
 type CartItemInput = {
   id: string;
+  variantId?: string | null;
   quantity: number;
 };
 
@@ -32,181 +33,114 @@ export type OrderState = {
 };
 
 export async function createOrder(
-  formData: {
-    recipientName: string;
-    recipientPhone: string;
-    province: string;
-    city: string;
-    address: string;
-    postalCode: string;
-  },
+  formData: any,
   cartItems: CartItemInput[],
   userId?: string,
-  shippingMethodId?: string | null // 👈 پارامتر جدید: آیدی روش ارسال
+  shippingMethodId?: string | null
 ): Promise<OrderState> {
   const validated = OrderSchema.safeParse(formData);
-
-  if (!validated.success) {
-    return {
-      success: false,
-      message: "لطفاً اطلاعات را به درستی وارد کنید",
-      errors: validated.error.flatten().fieldErrors,
-    };
+  if (!validated.success || cartItems.length === 0) {
+    return { success: false, message: "اطلاعات نامعتبر است" };
   }
 
-  if (cartItems.length === 0) {
-    return { success: false, message: "سبد خرید خالی است" };
-  }
-
-  // 👈 استان (province) هم باید استخراج شود
   const { recipientName, recipientPhone, province, city, address, postalCode } =
     validated.data;
 
   try {
-    // ۱. شروع تراکنش دیتابیس
-    const order = await db.$transaction(async (tx) => {
-      let calculatedItemsPrice = 0; // قیمت کالاها
-      let shippingCost = 0; // هزینه ارسال
-      const orderItemsData = [];
-
-      // الف) محاسبه هزینه ارسال (امنیت: خواندن از دیتابیس)
-      if (shippingMethodId) {
-        const method = await tx.shippingMethod.findUnique({
-          where: { id: shippingMethodId },
-        });
-
-        if (method) {
-          shippingCost = method.price.toNumber();
-        } else {
-          // اگر روش ارسال پیدا نشد، می‌توانیم ارور بدهیم یا هزینه را 0 بگیریم
-          // throw new Error("روش ارسال انتخابی معتبر نیست.");
-        }
-      }
-
-      // ب) حلقه روی آیتم‌ها (چک موجودی و محاسبه قیمت کالاها)
-      for (const item of cartItems) {
-        const product = await tx.product.findUnique({
-          where: { id: item.id },
-        });
-
-        if (!product) {
-          throw new Error(`محصول با شناسه ${item.id} یافت نشد.`);
+    // مرحله ۱: تراکنش دیتابیس (بسیار سریع و بدون شبکه)
+    const order = await db.$transaction(
+      async (tx) => {
+        let shippingCost = 0;
+        if (shippingMethodId) {
+          const method = await tx.shippingMethod.findUnique({
+            where: { id: shippingMethodId },
+          });
+          if (method) shippingCost = method.price.toNumber();
         }
 
-        if (!product.isAvailable) {
-          throw new Error(`محصول "${product.name}" قابل فروش نیست.`);
+        let calculatedItemsPrice = 0;
+        const orderItemsData = [];
+
+        for (const item of cartItems) {
+          // کسر موجودی به صورت هوشمند (واریانت یا محصول اصلی)
+          if (item.variantId) {
+            const updateResult = await tx.productVariant.updateMany({
+              where: { id: item.variantId, stock: { gte: item.quantity } },
+              data: { stock: { decrement: item.quantity } },
+            });
+            if (updateResult.count === 0)
+              throw new Error("موجودی واریانت کافی نیست");
+          } else {
+            const updateResult = await tx.product.updateMany({
+              where: { id: item.id, stock: { gte: item.quantity } },
+              data: { stock: { decrement: item.quantity } },
+            });
+            if (updateResult.count === 0)
+              throw new Error("موجودی محصول کافی نیست");
+          }
+
+          const product = await tx.product.findUnique({
+            where: { id: item.id },
+          });
+          const price = Number(product!.price);
+          calculatedItemsPrice += price * item.quantity;
+
+          orderItemsData.push({
+            productId: item.id,
+            variantId: item.variantId || null,
+            quantity: item.quantity,
+            price: product!.price,
+          });
         }
 
-        // عملیات اتمیک کسر موجودی
-        const updateResult = await tx.product.updateMany({
-          where: {
-            id: item.id,
-            stock: { gte: item.quantity },
-          },
+        return await tx.order.create({
           data: {
-            stock: { decrement: item.quantity },
+            userId: userId || null,
+            totalPrice: calculatedItemsPrice + shippingCost,
+            recipientName,
+            recipientPhone,
+            province,
+            city,
+            address,
+            postalCode,
+            shippingMethodId,
+            shippingCost,
+            status: "PENDING",
+            items: { create: orderItemsData },
           },
         });
+      },
+      { timeout: 10000 }
+    ); // حداکثر ۱۰ ثانیه برای جلوگیری از قفل شدن طولانی
 
-        if (updateResult.count === 0) {
-          throw new Error(`موجودی محصول "${product.name}" کافی نیست.`);
-        }
-
-        const realPrice = Number(product.price);
-        calculatedItemsPrice += realPrice * item.quantity;
-
-        orderItemsData.push({
-          productId: product.id,
-          quantity: item.quantity,
-          price: product.price,
-        });
-      }
-
-      // ج) محاسبه قیمت نهایی (کالاها + هزینه ارسال)
-      const finalTotalPrice = calculatedItemsPrice + shippingCost;
-
-      // د) ساخت نهایی سفارش
-      const newOrder = await tx.order.create({
-        data: {
-          userId: userId || null,
-          recipientName,
-          recipientPhone,
-          province, // 👈 ذخیره استان
-          city,
-          address, // در مدل دیتابیس فیلد address دارید که همان fullAddress است
-          postalCode,
-
-          shippingMethodId, // 👈 ذخیره آیدی روش ارسال
-          shippingCost, // 👈 ذخیره هزینه ارسال در لحظه خرید
-
-          totalPrice: finalTotalPrice, // 👈 قیمت نهایی
-          status: "PENDING",
-          items: {
-            create: orderItemsData,
-          },
-        },
-      });
-
-      return newOrder;
-    });
-
-    // ۲. درخواست پرداخت
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
+    // مرحله ۲: درخواست پرداخت (خارج از تراکنش)
     const payment = await requestPayment(
       Number(order.totalPrice),
       `سفارش ${order.id}`,
-      `${appUrl}/payment/verify`,
+      `${process.env.NEXT_PUBLIC_APP_URL}/payment/verify`,
       recipientPhone
     );
 
     if (payment.success && payment.authority) {
-      await db.order.update({
-        where: { id: order.id },
+      await db.payment.create({
         data: {
-          // در مدل شما paymentAuthority در جدول Payment است یا Order؟
-          // اگر در Order ندارید، باید در جدول Payment رکورد بسازید.
-          // فرض بر این است که طبق مدل جدید، Authority در جدول Payment ذخیره می‌شود:
-          payments: {
-            create: {
-              amount: order.totalPrice,
-              authority: payment.authority,
-              status: "PENDING",
-              gateway: "ZARINPAL",
-            },
-          },
-          // اگر فیلد paymentAuthority هنوز در مدل Order هست، خط زیر را آنکامنت کنید:
-          // paymentAuthority: payment.authority
+          orderId: order.id,
+          amount: order.totalPrice,
+          authority: payment.authority,
+          gateway: "ZARINPAL",
         },
       });
-
-      return {
-        success: true,
-        url: payment.url,
-      };
-    } else {
-      // رول‌بک دستی در صورت خطای درگاه
-      for (const item of cartItems) {
-        await db.product.update({
-          where: { id: item.id },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
-
-      await db.order.delete({ where: { id: order.id } });
-
-      console.error("ZarinPal Error Log:", payment.error);
-      return {
-        success: false,
-        message: "خطا در ارتباط با درگاه پرداخت. سفارش لغو شد.",
-      };
+      return { success: true, url: payment.url };
     }
-  } catch (error: any) {
-    console.error("Order Creation Error:", error);
+
+    // در صورت شکست در اتصال به درگاه، سفارش لغو نمی‌شود بلکه PENDING می‌ماند
+    // تا کاربر بتواند دوباره تلاش کند (Best Practice فروشگاهی)
     return {
       success: false,
-      message: error.message || "خطا در ثبت سفارش",
+      message: "خطا در اتصال به درگاه؛ لطفاً از پنل کاربری مجدد تلاش کنید.",
     };
+  } catch (error: any) {
+    return { success: false, message: error.message || "خطا در ثبت سفارش" };
   }
 }
 
