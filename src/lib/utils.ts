@@ -41,3 +41,9 @@ export function serializeProduct(product: any): ProductClient {
     brand: product.brand || null,
   };
 }
+
+export const toEnglishDigits = (str: string) => {
+  return str
+    .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
+};

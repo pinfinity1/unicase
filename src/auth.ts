@@ -16,29 +16,35 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
-      // نام فیلدها برای فرم لاگین
-      credentials: {
-        phoneNumber: { label: "شماره موبایل", type: "text" },
-        password: { label: "رمز عبور", type: "password" },
-      },
-      // منطق بررسی یوزر و پسورد
       authorize: async (credentials) => {
-        const validatedFields = LoginSchema.safeParse(credentials);
+        // ۱. دریافت پارامترهای ارسالی از اکشن‌ها
+        const { phoneNumber, password, isOtpLogin } = credentials;
+
+        // ۲. سناریوی ورود با کد یکبار مصرف (OTP)
+        if (isOtpLogin === "true") {
+          const user = await db.user.findUnique({
+            where: { phoneNumber: phoneNumber as string },
+          });
+
+          if (!user) return null;
+
+          // در ورود با OTP، اگر کاربر وجود داشت، تایید می‌شود
+          return user;
+        }
+
+        // ۳. سناریوی ورود با رمز عبور (منطق قبلی شما)
+        const validatedFields = LoginSchema.safeParse({
+          phoneNumber,
+          password,
+        });
 
         if (validatedFields.success) {
           const { phoneNumber, password } = validatedFields.data;
+          const user = await db.user.findUnique({ where: { phoneNumber } });
 
-          // ۱. پیدا کردن کاربر از دیتابیس
-          const user = await db.user.findUnique({
-            where: { phoneNumber },
-          });
-
-          // اگر کاربر نبود یا پسورد نداشت
           if (!user || !user.password) return null;
 
-          // ۲. مقایسه پسورد وارد شده با پسورد هش شده در دیتابیس
           const passwordsMatch = await bcrypt.compare(password, user.password);
-
           if (passwordsMatch) return user;
         }
 

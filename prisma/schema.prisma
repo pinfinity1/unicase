@@ -29,6 +29,14 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
+model VerificationToken {
+  id          String   @id @default(cuid())
+  phoneNumber String
+  token       String   @unique
+  expires     DateTime
+  @@unique([phoneNumber, token])
+}
+
 model Category {
   id       String    @id @default(cuid())
   name     String

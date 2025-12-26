@@ -1,18 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { serializeProduct } from "@/lib/utils";
+import { serializeProduct, toEnglishDigits } from "@/lib/utils";
 import { unstable_cache } from "next/cache";
-
-/**
- * توابع کمکی برای نرمال‌سازی متن و اعداد
- * هدف: بهبود دقت جستجو برای کاربران فارسی‌زبان
- */
-function toEnglishDigits(str: string): string {
-  return str
-    .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
-    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
-}
 
 function toPersianDigits(str: string): string {
   return str.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[parseInt(d)]);

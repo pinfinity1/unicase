@@ -1,141 +1,64 @@
+// src/app/(auth)/login/page.tsx
 "use client";
 
-import { useActionState } from "react";
-import Link from "next/link";
-import Image from "next/image"; // 👈 ۱. ایمپورت ایمیج
-import { loginAction } from "@/actions/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState, useTransition } from "react";
+import { PhoneStep } from "@/components/auth/phone-step";
+import { LoginStep } from "@/components/auth/login-step";
+import { RegisterStep } from "@/components/auth/register-step";
+import { OtpStep } from "@/components/auth/otp-step";
 
-export default function LoginPage() {
-  const [state, formAction, isPending] = useActionState(loginAction, undefined);
+export default function UnifiedAuthPage() {
+  const [step, setStep] = useState<"PHONE" | "LOGIN" | "REGISTER" | "OTP">(
+    "PHONE"
+  );
+
+  // ۲. نگهداری داده‌های مشترک بین مراحل
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+
+  // ۳. مدیریت وضعیت بارگذاری سراسری
+  const [isPending, startTransition] = useTransition();
+
+  const renderStep = () => {
+    switch (step) {
+      case "PHONE":
+        return (
+          <PhoneStep
+            setStep={setStep}
+            phone={phone}
+            setPhone={setPhone}
+            isPending={isPending}
+            startTransition={startTransition}
+          />
+        );
+      case "LOGIN":
+        return <LoginStep setStep={setStep} phone={phone} />;
+      case "REGISTER":
+        return (
+          <RegisterStep
+            setStep={setStep}
+            phone={phone}
+            setPassword={setPassword} // ارسال تابع برای جلوگیری از خطای setPassword is not a function
+          />
+        );
+      case "OTP":
+        return (
+          <OtpStep
+            setStep={setStep}
+            phone={phone}
+            password={password} // ارسال رمز برای مرحله نهایی ثبت‌نام
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 px-4 py-12 text-gray-900 sm:px-6 lg:px-8">
-      <div className="w-full max-w-[380px] space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        {/* هدر صفحه لاگین */}
-        <div className="flex flex-col items-center text-center">
-          {/* ۲. نمایش لوگوی اصلی به جای آیکون پیش‌فرض */}
-          <div className="relative h-20 w-20 mb-4">
-            <Image
-              src="/logo/unicase-black.png" // 👈 مسیر لوگوی شما در public
-              alt="UniCase Logo"
-              fill
-              className="object-contain"
-              priority
-            />
-          </div>
-
-          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 font-sans text-3xl">
-            ورود به حساب کاربری
-          </h2>
-          <p className="mt-2 text-sm text-gray-500">
-            برای ادامه، وارد حساب{" "}
-            <span className="font-semibold text-gray-800 font-sans text-lg">
-              UniCase
-            </span>{" "}
-            خود شوید
-          </p>
-        </div>
-
-        <div className="bg-white px-6 py-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl border border-gray-100 sm:px-10">
-          <form action={formAction} className="space-y-6">
-            {state?.message && (
-              <div
-                className={cn(
-                  "rounded-xl p-3 text-sm text-center font-medium border",
-                  state.errors
-                    ? "bg-red-50 text-red-600 border-red-100"
-                    : "bg-blue-50 text-blue-600 border-blue-100" // برای پیام‌های اطلاع‌رسانی احتمالی
-                )}
-              >
-                {state.message}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label
-                  htmlFor="phoneNumber"
-                  className="text-sm font-semibold text-gray-700"
-                >
-                  شماره موبایل
-                </Label>
-                <Input
-                  id="phoneNumber"
-                  name="phoneNumber"
-                  type="tel"
-                  placeholder="0912..."
-                  required
-                  dir="ltr"
-                  className="h-12 bg-white border-gray-200 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 text-left px-4 rounded-xl placeholder:text-gray-300 text-gray-900 shadow-sm"
-                />
-                {state?.errors?.phoneNumber && (
-                  <p className="text-xs text-red-500 text-right mt-1 font-medium">
-                    {state.errors.phoneNumber}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label
-                    htmlFor="password"
-                    className="text-sm font-semibold text-gray-700"
-                  >
-                    رمز عبور
-                  </Label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-                  >
-                    فراموشی رمز؟
-                  </Link>
-                </div>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  dir="ltr"
-                  className="h-12 bg-white border-gray-200 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 text-left px-4 rounded-xl placeholder:text-gray-300 text-gray-900 shadow-sm"
-                />
-                {state?.errors?.password && (
-                  <p className="text-xs text-red-500 text-right mt-1 font-medium">
-                    {state.errors.password}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isPending}
-              className={cn(
-                "w-full h-12 rounded-xl font-bold text-base shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:-translate-y-0.5 transition-all duration-300",
-                isPending && "opacity-70 cursor-not-allowed hover:translate-y-0"
-              )}
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  در حال ورود...
-                </>
-              ) : (
-                "ورود"
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-8 pt-6 border-t border-gray-50 text-center">
-            <p className="text-xs text-gray-400 font-medium">
-              © ۲۰۲۵ UniCase. All rights reserved.
-            </p>
-          </div>
-        </div>
+    <div className="w-full max-w-[380px] transition-all duration-300">
+      {/* کارت اصلی با استایل ساده و شکیل */}
+      <div className="bg-white p-8 rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.03)] border border-gray-100">
+        {renderStep()}
       </div>
     </div>
   );
