@@ -60,18 +60,31 @@ export function SearchTrigger() {
       {/* 📱 دکمه موبایل: دایره مات (هماهنگ با سبد خرید) */}
       <button
         onClick={() => setOpenSearch(true)}
-        className="
-          md:hidden
-          flex h-10 w-10 items-center justify-center rounded-full 
-          bg-white/40 hover:bg-white/60
-          border border-white/50
-          shadow-sm active:scale-95
-          backdrop-blur-md
-          transition-all duration-300
-          mr-2
-        "
+        aria-label="جستجو در محصولات"
+        className="md:hidden
+    flex h-10 w-10 items-center justify-center rounded-full 
+    bg-white/40 hover:bg-white/60
+    border border-white/50
+    backdrop-blur-md
+    
+    /* ۲. سیستم سایه و عمق (Liquid Feel) */
+    shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)] 
+    hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.12)]
+    
+    /* ۳. انیمیشن و تعامل */
+    transition-all duration-300 ease-out
+    active:scale-90
+    group cursor-pointer
+  "
       >
-        <Search className="h-5 w-5 text-gray-800" strokeWidth={2} />
+        <Search
+          className="
+      h-5 w-5 text-gray-900 
+      transition-transform duration-300 
+      group-hover:scale-110 group-hover:rotate-3
+    "
+          strokeWidth={2.5}
+        />
       </button>
 
       {/* مودال جستجو */}

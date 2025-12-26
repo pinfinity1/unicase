@@ -13,13 +13,15 @@ export const authConfig = {
       const isOnAdminPanel = nextUrl.pathname.startsWith("/admin");
       const isOnLoginPage = nextUrl.pathname.startsWith("/login");
 
+      // ۱. محافظت از پنل ادمین
       if (isOnAdminPanel) {
-        if (!isLoggedIn) return false;
+        if (!isLoggedIn) return false; // هدایت خودکار به لاگین
         if (userRole !== "ADMIN")
           return Response.redirect(new URL("/", nextUrl));
         return true;
       }
 
+      // ۲. جلوگیری از دسترسی مجدد به لاگین برای کاربران لاگین شده
       if (isOnLoginPage && isLoggedIn) {
         const destination = userRole === "ADMIN" ? "/admin" : "/";
         return Response.redirect(new URL(destination, nextUrl));
@@ -28,17 +30,20 @@ export const authConfig = {
       return true;
     },
 
-    jwt({ token, user }) {
+    // انتقال تمام داده‌ها به توکن (برای دسترسی در Middleware و Client)
+    async jwt({ token, user }) {
       if (user) {
+        token.id = user.id as string;
         token.role = user.role;
-        token.id = user.id;
+        token.phoneNumber = user.phoneNumber;
       }
       return token;
     },
-    session({ session, token }) {
-      if (token && session.user) {
-        session.user.role = token.role as "ADMIN" | "USER";
-        session.user.id = token.id as string;
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.phoneNumber = token.phoneNumber;
       }
       return session;
     },

@@ -1,24 +1,27 @@
-// مسیر: src/types/next-auth.d.ts
-import { DefaultSession } from "next-auth";
+// src/types/next-auth.d.ts
+import NextAuth, { DefaultSession } from "next-auth";
+import { JWT } from "next-auth/jwt";
 
-// گسترش تایپ‌های پیش‌فرض Session
 declare module "next-auth" {
   interface Session {
     user: {
-      role: "ADMIN" | "USER";
       id: string;
+      role: "ADMIN" | "USER";
+      phoneNumber: string;
     } & DefaultSession["user"];
   }
 
   interface User {
+    id?: string;
     role: "ADMIN" | "USER";
+    phoneNumber: string;
   }
 }
 
-// گسترش تایپ‌های JWT (چون اطلاعات اول میره تو توکن)
 declare module "next-auth/jwt" {
   interface JWT {
-    role: "ADMIN" | "USER";
     id: string;
+    role: "ADMIN" | "USER";
+    phoneNumber: string;
   }
 }

@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button";
 import { CartCounter } from "@/components/cart/cart-counter";
 import { SearchTrigger } from "../search/search-trigger";
 import { LiquidHeader } from "./liquid-header"; // ایمپورت پوسته کلاینت
+import { auth } from "@/auth";
+import { UserAccountNav } from "./user-account-nav";
 
-export function Navbar() {
+export async function Navbar() {
+  const session = await auth();
+
   return (
     <LiquidHeader>
       {/* --- محتوای داخلی (توسط سرور رندر می‌شود) --- */}
@@ -36,12 +40,19 @@ export function Navbar() {
         {/* حالا CartCounter بدون خطا کار می‌کند چون در سرور رندر می‌شود */}
         <CartCounter />
 
-        <Button
-          asChild
-          className="hidden sm:flex rounded-full px-6 font-bold bg-gray-900 text-white shadow-lg hover:bg-black hover:scale-102 transition-all duration-300"
-        >
-          <Link href="/login">ورود</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {session ? (
+            // نمایش دراپ‌داون پروفایل به جای دکمه ورود
+            <UserAccountNav user={session.user} />
+          ) : (
+            <Button
+              asChild
+              className="rounded-full px-6 font-bold bg-gray-900 text-white shadow-lg hover:bg-black hover:scale-102 transition-all duration-300"
+            >
+              <Link href="/login">ورود</Link>
+            </Button>
+          )}
+        </div>
       </div>
     </LiquidHeader>
   );

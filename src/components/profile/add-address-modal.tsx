@@ -21,8 +21,13 @@ import { Textarea } from "@/components/ui/textarea";
 // ایمپورت اکشن و ولیدیشن
 import { createAddress } from "@/actions/address";
 import { addressSchema, AddressFormData } from "@/lib/validations/address";
+import { cn } from "@/lib/utils";
 
-export function AddAddressModal() {
+interface AddAddressModalProps {
+  isMobileFloating?: boolean; // 👈 اضافه کردن این خط برای رفع خطای TypeScript
+}
+
+export function AddAddressModal({ isMobileFloating }: AddAddressModalProps) {
   const [open, setOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
@@ -56,9 +61,22 @@ export function AddAddressModal() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2 bg-gray-900 text-white hover:bg-black">
-          <Plus className="h-4 w-4" />
-          افزودن آدرس جدید
+        <Button
+          className={cn(
+            "gap-2 bg-black text-white hover:bg-zinc-800 rounded-2xl transition-all shadow-xl",
+            // اگر حالت شناور بود، استایل را تغییر بده
+            isMobileFloating &&
+              "fixed bottom-24 left-6 h-14 w-14 rounded-full p-0 shadow-2xl z-50 animate-bounce"
+          )}
+        >
+          {isMobileFloating ? (
+            <Plus className="h-6 w-6" />
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              افزودن آدرس جدید
+            </>
+          )}
         </Button>
       </DialogTrigger>
 

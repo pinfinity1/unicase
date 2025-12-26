@@ -50,23 +50,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: "/login", // آدرس صفحه لاگین اختصاصی شما
   },
   callbacks: {
-    // اضافه کردن نقش (Role) و ID به سشن کاربر
-    async session({ session, token }) {
-      if (token.sub && session.user) {
-        session.user.id = token.sub;
-      }
-      if (token.role && session.user) {
-        // @ts-ignore
-        session.user.role = token.role;
-      }
-      return session;
-    },
     async jwt({ token, user }) {
       if (user) {
-        // @ts-ignore
+        token.id = user.id as string;
         token.role = user.role;
+        token.phoneNumber = user.phoneNumber;
       }
       return token;
+    },
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.phoneNumber = token.phoneNumber;
+      }
+      return session;
     },
   },
 });
