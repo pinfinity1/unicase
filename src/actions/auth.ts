@@ -7,8 +7,9 @@ import { db } from "@/lib/db";
 import { FormState } from "@/types";
 import bcrypt from "bcryptjs";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cartService } from "@/services/cart-service";
+import { checkRateLimit, generateSecureOtp } from "@/lib/security";
 
 const LoginSchema = z.object({
   phoneNumber: z.string().min(11, "شماره موبایل باید ۱۱ رقم باشد"),
@@ -17,20 +18,27 @@ const LoginSchema = z.object({
 
 const RegisterSchema = z
   .object({
-    phoneNumber: z.string().min(11, "شماره موبایل باید ۱۱ رقم باشد"),
-    password: z.string().min(6, "رمز عبور باید حداقل ۶ کاراکتر باشد"),
-    confirmPassword: z.string().min(6, "تایید رمز عبور الزامی است"),
+    phoneNumber: z.string().min(11),
+    password: z.string().min(6),
+    confirmPassword: z.string().min(6),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "رمز عبور و تایید آن مطابقت ندارند",
     path: ["confirmPassword"],
   });
 
-// --- Actions ---
-
 export async function checkUserAction(
   phoneNumber: string
 ): Promise<{ exists: boolean; error?: string }> {
+  const ip = (await headers()).get("x-forwarded-for") || "unknown";
+
+  if (!checkRateLimit(`check_user_${ip}`, 10, 60)) {
+    return {
+      exists: false,
+      error: "تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً کمی صبر کنید.",
+    };
+  }
+
   try {
     const user = await db.user.findUnique({
       where: { phoneNumber },
@@ -46,6 +54,10 @@ export async function loginAction(
   prevState: FormState | undefined,
   formData: FormData
 ): Promise<FormState | undefined> {
+  // ... همان کد قبلی ...
+  // فقط برای خلاصه شدن اینجا نیاوردم، کد شما در فایل اصلی صحیح بود
+  // تنها نکته: اگر بخواهید روی لاگین هم Rate Limit بگذارید، مشابه checkUserAction عمل کنید.
+
   const rawData = {
     phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
@@ -73,14 +85,13 @@ export async function loginAction(
     if (user) {
       if (user.role === "ADMIN") destination = "/admin";
 
-      // 🔥 MERGE LOGIC
       const cookieStore = await cookies();
       const guestCartId = cookieStore.get("cartId")?.value;
 
       if (guestCartId) {
         try {
           await cartService.mergeCarts(user.id, guestCartId);
-          cookieStore.delete("cartId"); // پاکسازی کوکی
+          cookieStore.delete("cartId");
         } catch (mergeError) {
           console.error("Cart Merge Error (Login):", mergeError);
         }
@@ -160,14 +171,13 @@ export async function registerAction(
 
     await db.verificationToken.delete({ where: { id: verifiedToken.id } });
 
-    // 🔥 MERGE LOGIC
     const cookieStore = await cookies();
     const guestCartId = cookieStore.get("cartId")?.value;
 
     if (guestCartId) {
       try {
         await cartService.mergeCarts(newUser.id, guestCartId);
-        cookieStore.delete("cartId"); // پاکسازی کوکی
+        cookieStore.delete("cartId");
       } catch (e) {
         console.error("Cart Merge Error (Register):", e);
       }
@@ -191,6 +201,15 @@ export async function registerAction(
 }
 
 export async function sendOtpAction(phoneNumber: string) {
+  const ip = (await headers()).get("x-forwarded-for") || "unknown";
+
+  if (!checkRateLimit(`send_otp_${ip}`, 3, 120)) {
+    return {
+      success: false,
+      message: "تعداد درخواست‌های OTP شما زیاد است. لطفاً ۲ دقیقه صبر کنید.",
+    };
+  }
+
   try {
     const lastToken = await db.verificationToken.findFirst({
       where: { phoneNumber },
@@ -203,15 +222,17 @@ export async function sendOtpAction(phoneNumber: string) {
         (lastToken.expires.getTime() - now.getTime()) / 1000
       );
 
-      if (diffInSeconds > 30) {
+      const timeSinceCreation = 120 - diffInSeconds;
+
+      if (diffInSeconds > 60) {
         return {
           success: false,
-          message: `لطفاً ${diffInSeconds - 30} ثانیه دیگر مجدداً تلاش کنید.`,
+          message: `لطفاً ${diffInSeconds - 60} ثانیه دیگر مجدداً تلاش کنید.`,
         };
       }
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = generateSecureOtp();
     const expires = new Date(Date.now() + 2 * 60 * 1000);
 
     await db.$transaction([
@@ -221,7 +242,9 @@ export async function sendOtpAction(phoneNumber: string) {
       }),
     ]);
 
-    console.log(`[AUTH] کد تایید ۲ دقیقه‌ای برای ${phoneNumber}: ${otp}`);
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[SECURE AUTH] OTP for ${phoneNumber}: ${otp}`);
+    }
 
     return { success: true };
   } catch (error) {
@@ -230,7 +253,6 @@ export async function sendOtpAction(phoneNumber: string) {
   }
 }
 
-// ✅ اصلاح شده: ورود با OTP (لینک مستقیم یا جایگزین رمز)
 export async function loginWithOtpAction(phoneNumber: string, token: string) {
   try {
     const verifiedToken = await db.verificationToken.findFirst({
@@ -242,7 +264,6 @@ export async function loginWithOtpAction(phoneNumber: string, token: string) {
 
     await db.verificationToken.delete({ where: { id: verifiedToken.id } });
 
-    // 🔥 MERGE LOGIC START
     const user = await db.user.findUnique({
       where: { phoneNumber },
       select: { id: true },
@@ -255,13 +276,12 @@ export async function loginWithOtpAction(phoneNumber: string, token: string) {
       if (guestCartId) {
         try {
           await cartService.mergeCarts(user.id, guestCartId);
-          cookieStore.delete("cartId"); // پاکسازی کوکی
+          cookieStore.delete("cartId");
         } catch (e) {
           console.error("Cart Merge Error (LoginWithOtp):", e);
         }
       }
     }
-    // 🔥 MERGE LOGIC END
 
     await signIn("credentials", {
       phoneNumber,
@@ -269,7 +289,6 @@ export async function loginWithOtpAction(phoneNumber: string, token: string) {
       redirectTo: "/",
     });
 
-    // این خط احتمالاً هرگز اجرا نمیشه چون signIn ریدایرکت میکنه، ولی برای تایپ‌اسکریپت:
     return { success: true, message: "ورود موفق" };
   } catch (error) {
     if (isRedirectError(error)) throw error;
@@ -277,7 +296,6 @@ export async function loginWithOtpAction(phoneNumber: string, token: string) {
   }
 }
 
-// ✅ اصلاح شده: ورود با OTP (فرم)
 export async function verifyOtpAction(
   prevState: FormState | undefined,
   formData: FormData
@@ -300,7 +318,6 @@ export async function verifyOtpAction(
 
     await db.verificationToken.delete({ where: { id: verifiedToken.id } });
 
-    // 🔥 MERGE LOGIC START
     const user = await db.user.findUnique({
       where: { phoneNumber },
       select: { id: true },
@@ -313,13 +330,12 @@ export async function verifyOtpAction(
       if (guestCartId) {
         try {
           await cartService.mergeCarts(user.id, guestCartId);
-          cookieStore.delete("cartId"); // پاکسازی کوکی
+          cookieStore.delete("cartId");
         } catch (e) {
           console.error("Cart Merge Error (VerifyOtp):", e);
         }
       }
     }
-    // 🔥 MERGE LOGIC END
 
     await signIn("credentials", {
       phoneNumber,
