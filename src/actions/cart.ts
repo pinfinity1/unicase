@@ -1,62 +1,86 @@
 "use server";
 
-import { getOrCreateCart } from "@/lib/cart";
+import { cartService } from "@/services/cart-service"; // 👈 استفاده از سرویس جدید
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/auth";
+import { cookies } from "next/headers";
+
+// تابعی کمکی برای گرفتن شناسه کاربر یا مهمان
+async function getCartContext() {
+  const session = await auth();
+  const cookieStore = await cookies();
+  const sessionCartId = cookieStore.get("cartId")?.value;
+
+  return {
+    userId: session?.user?.id,
+    sessionCartId,
+    cookieStore,
+  };
+}
 
 // ۱. افزودن به سبد خرید
 export async function addToCartAction(productId: string, variantId?: string) {
-  // 👈 اضافه کردن ورودی دوم
   try {
-    const cart = await getOrCreateCart();
+    const { userId, sessionCartId, cookieStore } = await getCartContext();
 
-    // پیدا کردن محصول و واریانت برای چک کردن موجودی دقیق
-    const product = await db.product.findUnique({
-      where: { id: productId },
-      include: { variants: true },
-    });
+    // ۱. دریافت یا ساخت سبد خرید
+    let cart = await cartService.getCart(userId, sessionCartId);
 
-    if (!product) {
-      return { success: false, message: "محصول یافت نشد." };
+    // اگر سبد وجود نداشت، باید بسازیم
+    if (!cart) {
+      if (userId) {
+        // برای کاربر لاگین شده
+        cart = await cartService.createCart(userId);
+      } else {
+        // برای کاربر مهمان (ساخت کوکی)
+        const newSessionId =
+          Math.random().toString(36).substring(7) + Date.now();
+        cart = await cartService.createCart(undefined, newSessionId);
+
+        cookieStore.set("cartId", newSessionId, {
+          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+        });
+      }
     }
 
-    // تعیین موجودی مجاز (اگر واریانت داشت، موجودی همان رنگ، وگرنه موجودی کل)
-    let availableStock = product.stock;
-    if (variantId) {
-      const selectedVariant = product.variants.find((v) => v.id === variantId);
-      if (selectedVariant) availableStock = selectedVariant.stock;
+    if (!cart) return { success: false, message: "خطا در ایجاد سبد خرید" };
+
+    // ۲. چک کردن موجودی (با استفاده از سرویس)
+    const availableStock = await cartService.checkStock(productId, variantId);
+
+    // اگر موجودی صفر بود
+    if (availableStock <= 0) {
+      return { success: false, message: "این محصول ناموجود است." };
     }
 
-    // چک کنیم آیا این ترکیب محصول و واریانت قبلاً در سبد بوده؟
+    // ۳. مدیریت آیتم تکراری یا جدید
     const existingItem = cart.items.find(
       (item) =>
         item.productId === productId && item.variantId === (variantId || null)
     );
 
     if (existingItem) {
-      // بررسی موجودی قبل از اضافه کردن
       if (existingItem.quantity < availableStock) {
         await db.cartItem.update({
           where: { id: existingItem.id },
           data: { quantity: existingItem.quantity + 1 },
         });
       } else {
-        return { success: false, message: "موجودی این مدل کافی نیست." };
+        return { success: false, message: "موجودی این محصول کافی نیست." };
       }
     } else {
-      // ایجاد آیتم جدید با ثبت واریانت
-      if (availableStock > 0) {
-        await db.cartItem.create({
-          data: {
-            cartId: cart.id,
-            productId: productId,
-            variantId: variantId || null, // 👈 ثبت در ستون جدید دیتابیس
-            quantity: 1,
-          },
-        });
-      } else {
-        return { success: false, message: "این مدل ناموجود است." };
-      }
+      await db.cartItem.create({
+        data: {
+          cartId: cart.id,
+          productId: productId,
+          variantId: variantId || null,
+          quantity: 1,
+        },
+      });
     }
 
     revalidatePath("/", "layout");
@@ -67,45 +91,40 @@ export async function addToCartAction(productId: string, variantId?: string) {
   }
 }
 
+// ۲. تغییر تعداد (بدون تغییر زیاد، فقط منطق دریافت سبد عوض شد)
 export async function updateQuantityAction(
   productId: string,
   newQuantity: number,
-  variantId?: string // 👈 اضافه شدن پارامتر سوم برای رفع خطا
+  variantId?: string
 ) {
   try {
-    const cart = await getOrCreateCart();
+    const { userId, sessionCartId } = await getCartContext();
+    const cart = await cartService.getCart(userId, sessionCartId);
 
-    // پیدا کردن دقیق ردیف مورد نظر بر اساس محصول و واریانت
+    if (!cart) return { success: false, message: "سبد خرید یافت نشد." };
+
     const item = await db.cartItem.findFirst({
       where: {
         cartId: cart.id,
         productId: productId,
         variantId: variantId || null,
       },
-      include: {
-        product: true,
-        variant: true,
-      },
+      include: { variant: true, product: true },
     });
 
-    if (!item) return { success: false, message: "آیتم در سبد خرید یافت نشد." };
+    if (!item) return { success: false, message: "آیتم یافت نشد." };
 
-    // بررسی موجودی انبار بر اساس واریانت یا محصول اصلی
-    const availableStock = item.variant
-      ? item.variant.stock
-      : item.product.stock;
+    const stock = item.variant ? item.variant.stock : item.product.stock;
 
     if (newQuantity <= 0) {
-      // اگر تعداد صفر شد، حذف کن
       await db.cartItem.delete({ where: { id: item.id } });
-    } else if (newQuantity <= availableStock) {
-      // آپدیت تعداد در صورت داشتن موجودی
+    } else if (newQuantity <= stock) {
       await db.cartItem.update({
         where: { id: item.id },
         data: { quantity: newQuantity },
       });
     } else {
-      return { success: false, message: "موجودی انبار کافی نیست." };
+      return { success: false, message: "موجودی کافی نیست." };
     }
 
     revalidatePath("/", "layout");
@@ -116,17 +135,17 @@ export async function updateQuantityAction(
   }
 }
 
-/**
- * حذف کامل یک آیتم خاص (محصول + واریانت) از سبد خرید
- */
+// ۳. حذف محصول
 export async function removeFromCartAction(
   productId: string,
   variantId?: string
 ) {
   try {
-    const cart = await getOrCreateCart();
+    const { userId, sessionCartId } = await getCartContext();
+    const cart = await cartService.getCart(userId, sessionCartId);
 
-    // پیدا کردن ردیف دقیق برای حذف
+    if (!cart) return { success: false, message: "سبد خرید یافت نشد." };
+
     const item = await db.cartItem.findFirst({
       where: {
         cartId: cart.id,
@@ -140,7 +159,7 @@ export async function removeFromCartAction(
     }
 
     revalidatePath("/", "layout");
-    return { success: true, message: "محصول از سبد حذف شد." };
+    return { success: true, message: "حذف شد." };
   } catch (error) {
     console.error("Remove Error:", error);
     return { success: false, message: "خطا در حذف محصول." };

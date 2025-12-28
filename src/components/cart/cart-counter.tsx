@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
-import { getCart } from "@/lib/cart";
 import { formatPrice } from "@/lib/utils";
+import { auth } from "@/auth";
+import { cookies } from "next/headers";
+import { cartService } from "@/services/cart-service";
 
 export async function CartCounter() {
-  const cart = await getCart();
+  const session = await auth();
+  const cookieStore = await cookies();
+  const guestId = cookieStore.get("cartId")?.value;
+
+  // فراخوانی سرویس
+  const cart = await cartService.getCart(session?.user?.id, guestId);
   const itemsCount =
     cart?.items.reduce((acc, item) => acc + item.quantity, 0) || 0;
 

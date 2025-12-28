@@ -1,4 +1,5 @@
 "use server";
+
 import { signIn, signOut } from "@/auth";
 import { AuthError } from "next-auth";
 import { z } from "zod";
@@ -6,6 +7,8 @@ import { db } from "@/lib/db";
 import { FormState } from "@/types";
 import bcrypt from "bcryptjs";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { cookies } from "next/headers";
+import { cartService } from "@/services/cart-service";
 
 const LoginSchema = z.object({
   phoneNumber: z.string().min(11, "شماره موبایل باید ۱۱ رقم باشد"),
@@ -22,6 +25,8 @@ const RegisterSchema = z
     message: "رمز عبور و تایید آن مطابقت ندارند",
     path: ["confirmPassword"],
   });
+
+// --- Actions ---
 
 export async function checkUserAction(
   phoneNumber: string
@@ -62,11 +67,24 @@ export async function loginAction(
   try {
     const user = await db.user.findUnique({
       where: { phoneNumber },
-      select: { role: true },
+      select: { id: true, role: true },
     });
 
-    if (user && user.role === "ADMIN") {
-      destination = "/admin";
+    if (user) {
+      if (user.role === "ADMIN") destination = "/admin";
+
+      // 🔥 MERGE LOGIC
+      const cookieStore = await cookies();
+      const guestCartId = cookieStore.get("cartId")?.value;
+
+      if (guestCartId) {
+        try {
+          await cartService.mergeCarts(user.id, guestCartId);
+          cookieStore.delete("cartId"); // پاکسازی کوکی
+        } catch (mergeError) {
+          console.error("Cart Merge Error (Login):", mergeError);
+        }
+      }
     }
 
     await signIn("credentials", {
@@ -95,11 +113,9 @@ export async function registerAction(
   prevState: FormState | undefined,
   formData: FormData
 ): Promise<FormState | undefined> {
-  // ۱. استخراج داده‌های خام برای تایید اولیه توکن
   const token = formData.get("token") as string;
-  const rawPhoneNumber = formData.get("phoneNumber") as string; // تغییر نام برای جلوگیری از تداخل
+  const rawPhoneNumber = formData.get("phoneNumber") as string;
 
-  // ۲. تایید توکن قبل از هر عملیاتی
   const verifiedToken = await db.verificationToken.findFirst({
     where: {
       phoneNumber: rawPhoneNumber,
@@ -112,7 +128,6 @@ export async function registerAction(
     return { success: false, message: "کد تایید اشتباه یا منقضی است" };
   }
 
-  // ۳. اعتبارسنجی فیلدها با Zod
   const validatedFields = RegisterSchema.safeParse(
     Object.fromEntries(formData.entries())
   );
@@ -125,7 +140,6 @@ export async function registerAction(
     };
   }
 
-  // حالا تعریف phoneNumber بدون تداخل انجام می‌شود
   const { phoneNumber, password } = validatedFields.data;
 
   try {
@@ -136,7 +150,7 @@ export async function registerAction(
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await db.user.create({
+    const newUser = await db.user.create({
       data: {
         phoneNumber,
         password: hashedPassword,
@@ -144,8 +158,20 @@ export async function registerAction(
       },
     });
 
-    // حذف توکن بعد از موفقیت عملیات برای امنیت بیشتر
     await db.verificationToken.delete({ where: { id: verifiedToken.id } });
+
+    // 🔥 MERGE LOGIC
+    const cookieStore = await cookies();
+    const guestCartId = cookieStore.get("cartId")?.value;
+
+    if (guestCartId) {
+      try {
+        await cartService.mergeCarts(newUser.id, guestCartId);
+        cookieStore.delete("cartId"); // پاکسازی کوکی
+      } catch (e) {
+        console.error("Cart Merge Error (Register):", e);
+      }
+    }
 
     await signIn("credentials", {
       phoneNumber,
@@ -166,21 +192,17 @@ export async function registerAction(
 
 export async function sendOtpAction(phoneNumber: string) {
   try {
-    // ۱. بررسی Rate Limit (جلوگیری از ارسال رگباری کد)
     const lastToken = await db.verificationToken.findFirst({
       where: { phoneNumber },
-      orderBy: { expires: "desc" }, // بررسی آخرین توکن صادر شده
+      orderBy: { expires: "desc" },
     });
 
     if (lastToken) {
       const now = new Date();
-      // محاسبه ثانیه‌های باقی‌مانده تا انقضا (با فرض اعتبار ۲ دقیقه‌ای)
       const diffInSeconds = Math.floor(
         (lastToken.expires.getTime() - now.getTime()) / 1000
       );
 
-      // اگر بیش از ۳۰ ثانیه از اعتبار کد قبلی مانده باشد، اجازه ارسال جدید نمی‌دهیم
-      // (یعنی کاربر باید حداقل ۹۰ ثانیه صبر کند)
       if (diffInSeconds > 30) {
         return {
           success: false,
@@ -189,19 +211,16 @@ export async function sendOtpAction(phoneNumber: string) {
       }
     }
 
-    // ۲. تولید کد جدید و تنظیم زمان انقضا روی ۲ دقیقه
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = new Date(Date.now() + 2 * 60 * 1000); // دقیقاً ۲ دقیقه اعتبار
+    const expires = new Date(Date.now() + 2 * 60 * 1000);
 
-    // ۳. استفاده از تراکنش برای پاکسازی کدهای قبلی و ثبت کد جدید
     await db.$transaction([
-      db.verificationToken.deleteMany({ where: { phoneNumber } }), // حذف تمام توکن‌های قبلی این شماره
+      db.verificationToken.deleteMany({ where: { phoneNumber } }),
       db.verificationToken.create({
         data: { phoneNumber, token: otp, expires },
       }),
     ]);
 
-    // نمایش در ترمینال برای مرحله توسعه
     console.log(`[AUTH] کد تایید ۲ دقیقه‌ای برای ${phoneNumber}: ${otp}`);
 
     return { success: true };
@@ -211,7 +230,7 @@ export async function sendOtpAction(phoneNumber: string) {
   }
 }
 
-// ورود با OTP (جایگزین فراموشی رمز)
+// ✅ اصلاح شده: ورود با OTP (لینک مستقیم یا جایگزین رمز)
 export async function loginWithOtpAction(phoneNumber: string, token: string) {
   try {
     const verifiedToken = await db.verificationToken.findFirst({
@@ -223,18 +242,42 @@ export async function loginWithOtpAction(phoneNumber: string, token: string) {
 
     await db.verificationToken.delete({ where: { id: verifiedToken.id } });
 
-    // ورود مستقیم بدون نیاز به پسورد
+    // 🔥 MERGE LOGIC START
+    const user = await db.user.findUnique({
+      where: { phoneNumber },
+      select: { id: true },
+    });
+
+    if (user) {
+      const cookieStore = await cookies();
+      const guestCartId = cookieStore.get("cartId")?.value;
+
+      if (guestCartId) {
+        try {
+          await cartService.mergeCarts(user.id, guestCartId);
+          cookieStore.delete("cartId"); // پاکسازی کوکی
+        } catch (e) {
+          console.error("Cart Merge Error (LoginWithOtp):", e);
+        }
+      }
+    }
+    // 🔥 MERGE LOGIC END
+
     await signIn("credentials", {
       phoneNumber,
       isOtpLogin: "true",
       redirectTo: "/",
     });
+
+    // این خط احتمالاً هرگز اجرا نمیشه چون signIn ریدایرکت میکنه، ولی برای تایپ‌اسکریپت:
+    return { success: true, message: "ورود موفق" };
   } catch (error) {
     if (isRedirectError(error)) throw error;
     return { success: false, message: "خطایی رخ داد" };
   }
 }
 
+// ✅ اصلاح شده: ورود با OTP (فرم)
 export async function verifyOtpAction(
   prevState: FormState | undefined,
   formData: FormData
@@ -243,12 +286,11 @@ export async function verifyOtpAction(
   const token = formData.get("token") as string;
 
   try {
-    // ۱. جستجوی توکن در دیتابیس و چک کردن انقضا
     const verifiedToken = await db.verificationToken.findFirst({
       where: {
         phoneNumber,
         token,
-        expires: { gt: new Date() }, // چک کردن زمان انقضا
+        expires: { gt: new Date() },
       },
     });
 
@@ -256,19 +298,38 @@ export async function verifyOtpAction(
       return { success: false, message: "کد تایید اشتباه است یا منقضی شده." };
     }
 
-    // ۲. پاک کردن توکن استفاده شده برای امنیت بیشتر
     await db.verificationToken.delete({ where: { id: verifiedToken.id } });
 
-    // ۳. ورود کاربر به سیستم (Login)
+    // 🔥 MERGE LOGIC START
+    const user = await db.user.findUnique({
+      where: { phoneNumber },
+      select: { id: true },
+    });
+
+    if (user) {
+      const cookieStore = await cookies();
+      const guestCartId = cookieStore.get("cartId")?.value;
+
+      if (guestCartId) {
+        try {
+          await cartService.mergeCarts(user.id, guestCartId);
+          cookieStore.delete("cartId"); // پاکسازی کوکی
+        } catch (e) {
+          console.error("Cart Merge Error (VerifyOtp):", e);
+        }
+      }
+    }
+    // 🔥 MERGE LOGIC END
+
     await signIn("credentials", {
       phoneNumber,
-      isOtpLogin: "true", // سیگنال به Auth.js که ورود با OTP است
+      isOtpLogin: "true",
       redirectTo: "/",
     });
 
     return { success: true, message: "خوش آمدید!" };
   } catch (error) {
-    if (isRedirectError(error)) throw error; // اجازه به Next.js برای ریدایرکت
+    if (isRedirectError(error)) throw error;
     return { success: false, message: "خطایی در تایید کد رخ داد." };
   }
 }

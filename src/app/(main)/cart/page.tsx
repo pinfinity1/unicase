@@ -1,13 +1,19 @@
 import Link from "next/link";
 import Image from "next/image";
-import { getCart } from "@/lib/cart";
 import { CartControls } from "@/components/cart/cart-controls";
 import { Button } from "@/components/ui/button";
 import { ShoppingBag, ArrowLeft, ShieldCheck } from "lucide-react";
+import { auth } from "@/auth";
+import { cookies } from "next/headers";
+import { cartService } from "@/services/cart-service";
 
 export default async function CartPage() {
-  // ۱. دریافت دیتا از سرور
-  const cart = await getCart();
+  const session = await auth();
+  const cookieStore = await cookies();
+  const guestId = cookieStore.get("cartId")?.value;
+
+  // ۱. دریافت دیتا از سرویس جدید
+  const cart = await cartService.getCart(session?.user?.id, guestId);
 
   // اگر سبد خالی بود
   if (!cart || cart.items.length === 0) {
