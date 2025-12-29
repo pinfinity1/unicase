@@ -1,13 +1,24 @@
+// src/components/home/lucky-offers.tsx
+import Image from "next/image";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { serializeProduct } from "@/lib/utils";
-import { ProductCard } from "@/components/product/product-card";
-import { Sparkles, Clock } from "lucide-react";
+import { formatPrice } from "@/lib/utils";
+import { TicketPercent } from "lucide-react";
+
+// تابع تبدیل اعداد انگلیسی به فارسی
+const toPersianDigits = (num: number | string) => {
+  const farsiDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+  return num
+    .toString()
+    .replace(/\d/g, (x) => farsiDigits[parseInt(x)])
+    .replace(/,/g, "،"); // تبدیل ویرگول به جداکننده فارسی (اختیاری)
+};
 
 export async function LuckyOffers() {
   const rawProducts = await db.product.findMany({
     where: {
       isAvailable: true,
-      isArchived: false,
       discountPrice: { not: null },
     },
     take: 4,
@@ -15,57 +26,84 @@ export async function LuckyOffers() {
     include: { category: true },
   });
 
-  if (rawProducts.length === 0) return null;
+  if (rawProducts.length < 4) return null;
 
   const products = rawProducts.map(serializeProduct);
 
+  // محاسبه درصد تخفیف (برداشت از اولین محصول)
+  const firstProduct = products[0];
+  const discountPercentage = Math.round(
+    ((firstProduct.price - firstProduct.discountPrice!) / firstProduct.price) *
+      100
+  );
+
   return (
-    <section className="relative mt-12 mb-24">
-      {/* کانتینر اصلی: 
-        به جای باکس رنگی، از یک بوردر خیلی محو و یک گرادینت عمودی 
-        بسیار نامحسوس (از رنگ اصلی به سفید) استفاده می‌کنیم.
-      */}
-      <div className="mx-auto w-full max-w-screen-2xl rounded-[32px] border border-border/50 bg-gradient-to-b from-primary/5 via-transparent to-transparent p-6 sm:p-10">
-        {/* هدر بخش: تمیز و مینیمال */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>پیشنهاد لحظه‌ای</span>
-            </div>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              شانسِ امروز
-            </h2>
-            <p className="text-muted-foreground max-w-md text-sm sm:text-base">
-              محصولاتی که فقط برای مدت کوتاهی با این قیمت عرضه می‌شوند.
-            </p>
-          </div>
+    <section className="container mx-auto px-4 my-16">
+      {/* هدر بسیار ساده و مینیمال */}
+      <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+        <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
+          فروش ویژه امروز
+        </h2>
 
-          {/* تایمر: استایل کپسولی و مدرن (Glassmorphism) */}
-          <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/50 px-5 py-3 backdrop-blur-sm">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">
-              <Clock className="h-4 w-4" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                زمان باقی‌مانده
-              </span>
-              <span className="font-mono text-lg font-bold tabular-nums text-foreground tracking-widest">
-                12:00:00
-              </span>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 text-red-600">
+          <TicketPercent className="h-4 w-4" />
+          <span className="text-sm font-bold pt-1">
+            {toPersianDigits(discountPercentage)}٪ تخفیف
+          </span>
         </div>
+      </div>
 
-        {/* گرید محصولات */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {products.map((product) => (
-            /* نکته: پراپ isLucky را پاس می‌دهیم تا شاید بخواهید 
-               توی خود کارت یک بج کوچک "ویژه" نمایش دهید 
-            */
-            <ProductCard key={product.id} product={product} isLucky={true} />
-          ))}
-        </div>
+      {/* گرید محصولات - بدون انیمیشن اضافه */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {products.map((product) => (
+          <div key={product.id} className="group relative">
+            <Link href={`/products/${product.slug}`} className="block">
+              {/* بدنه کارت: ساده و تمیز */}
+              <div className="relative w-full overflow-hidden rounded-2xl border border-gray-200 bg-white transition-shadow hover:shadow-lg hover:border-gray-300">
+                {/* بخش تصویر: ثابت و بزرگ */}
+                <div className="relative aspect-[4/5] w-full bg-white p-4">
+                  {product.images?.[0] ? (
+                    <Image
+                      src={product.images[0]}
+                      alt={product.name}
+                      fill
+                      className="object-contain" // عکس کامل نمایش داده شود
+                      sizes="(max-width: 768px) 100vw, 25vw"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center bg-gray-50 text-gray-300">
+                      بدون تصویر
+                    </div>
+                  )}
+                </div>
+
+                {/* بخش اطلاعات: اعداد فارسی */}
+                <div className="p-4 pt-2 text-center space-y-2">
+                  <h3 className="text-sm font-bold text-gray-900 line-clamp-1">
+                    {product.name}
+                  </h3>
+
+                  <div className="flex items-center justify-center gap-2">
+                    {/* قیمت اصلی (خط خورده) */}
+                    <span className="text-xs text-gray-400 line-through decoration-gray-300">
+                      {toPersianDigits(formatPrice(product.price))}
+                    </span>
+
+                    {/* قیمت نهایی (بولد) */}
+                    <div className="flex items-center gap-1 text-gray-900">
+                      <span className="text-lg font-black font-sans">
+                        {toPersianDigits(formatPrice(product.discountPrice!))}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-medium">
+                        تومان
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          </div>
+        ))}
       </div>
     </section>
   );

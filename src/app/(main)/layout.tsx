@@ -10,10 +10,7 @@ export default function ShopLayout({
   return (
     <>
       <Navbar />
-      <main>
-        <div className="h-20"></div>
-        {children}
-      </main>
+      <main>{children}</main>
       <Footer />
     </>
   );
