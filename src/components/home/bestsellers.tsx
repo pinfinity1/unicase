@@ -1,8 +1,10 @@
+// src/components/home/bestsellers.tsx
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, Star } from "lucide-react";
 import { db } from "@/lib/db";
 import { serializeProduct } from "@/lib/utils";
-import { ProductCard } from "@/components/product/product-card";
+import { formatPrice } from "@/lib/utils";
 import {
   Carousel,
   CarouselContent,
@@ -11,85 +13,90 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 
+const toPersianDigits = (num: number | string) => {
+  const farsiDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+  return num
+    .toString()
+    .replace(/\d/g, (x) => farsiDigits[parseInt(x)])
+    .replace(/,/g, "،");
+};
+
 export async function Bestsellers() {
-  // دریافت محصولات ویژه (Featured)
   const rawProducts = await db.product.findMany({
-    where: {
-      isAvailable: true,
-      isArchived: false,
-      isFeatured: true,
-    },
-    take: 10, // تعداد را ۱۰ تا کردیم چون در اسلایدر جا هست
+    where: { isAvailable: true, isFeatured: true },
+    take: 8,
     orderBy: { updatedAt: "desc" },
     include: { category: true },
   });
 
   if (rawProducts.length === 0) return null;
-
   const products = rawProducts.map(serializeProduct);
 
   return (
-    <section className="mb-24 px-4 container mx-auto">
-      {" "}
-      {/* کانتینر برای وسط‌چین شدن */}
-      {/* هدر بخش (تیتر و دکمه‌ها) */}
-      <div className="mb-8 flex items-end justify-between px-2">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-100">
-              <Star className="h-4 w-4 text-yellow-600 fill-yellow-600" />
-            </div>
-            <h2 className="text-3xl font-black tracking-tight text-gray-900">
-              محبوب‌ترین‌ها
-            </h2>
+    <section className="container mx-auto px-4 mb-16 md:mb-24">
+      {/* هدر */}
+      <div className="flex items-center justify-between mb-6 px-1">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 md:h-8 md:w-8 items-center justify-center rounded-full bg-yellow-50 text-yellow-600">
+            <Star className="h-3.5 w-3.5 md:h-4 md:w-4 fill-current" />
           </div>
-          <p className="text-sm text-gray-500 mr-10 hidden sm:block">
-            انتخاب شده توسط تیم تحریریه یونی‌کیس
-          </p>
+          <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight">
+            محبوب‌ترین‌ها
+          </h2>
         </div>
-
         <Link
           href="/products"
-          className="group flex items-center gap-1 text-sm font-bold text-blue-600 hover:text-blue-700 whitespace-nowrap"
+          className="flex items-center gap-1 text-xs md:text-sm font-bold text-blue-600"
         >
-          مشاهده همه
-          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+          همه
+          <ArrowLeft className="h-3 w-3 md:h-4 md:w-4" />
         </Link>
       </div>
-      {/* اسلایدر محصولات */}
+
       <Carousel
-        opts={{
-          align: "start", // آیتم‌ها از ابتدای سمت راست شروع شوند
-          direction: "rtl", // جهت اسکرول راست‌چین
-        }}
-        className="w-full dir-rtl" // کلاس کمکی برای جهت
+        opts={{ align: "start", direction: "rtl", dragFree: true }}
+        className="w-full dir-rtl"
       >
-        <CarouselContent className="-ml-4 pb-4">
-          {" "}
-          {/* pb-4 برای اینکه سایه هاور کارت‌ها بریده نشود */}
+        <CarouselContent className="-ml-3 pb-4">
           {products.map((product) => (
+            // 📱 Mobile: basis-[40%] (یعنی ۲.۵ آیتم در صفحه دیده می‌شود -> تشویق به اسکرول)
+            // 💻 Desktop: basis-[20%] (۵ آیتم)
             <CarouselItem
               key={product.id}
-              className="pl-4 basis-[85%] sm:basis-1/2 md:basis-1/3 lg:basis-1/4 xl:basis-1/5"
+              className="pl-3 basis-[40%] sm:basis-[30%] md:basis-[22%] lg:basis-[18%]"
             >
-              {/* توضیح سایزها (basis):
-                  - موبایل (basis-[85%]): یک آیتم کامل + کمی از آیتم بعدی (UX بهتر)
-                  - تبلت (basis-1/2): دو آیتم
-                  - لپتاپ (basis-1/3): سه آیتم
-                  - دسکتاپ (basis-1/4): چهار آیتم
-                  - مانیتور بزرگ (basis-1/5): پنج آیتم
-               */}
-              <ProductCard product={product} />
+              <Link
+                href={`/products/${product.slug}`}
+                className="group block h-full"
+              >
+                <div className="flex flex-col gap-2">
+                  <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#F9F9F9] border border-transparent group-hover:border-gray-200 transition-colors">
+                    {product.images?.[0] ? (
+                      <Image
+                        src={product.images[0]}
+                        alt={product.name}
+                        fill
+                        className="object-contain p-3 mix-blend-multiply"
+                        sizes="(max-width: 768px) 40vw, 20vw"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="space-y-1 pr-1">
+                    <h3 className="text-xs font-bold text-gray-900 line-clamp-1">
+                      {product.name}
+                    </h3>
+                    <div className="flex items-center gap-1 text-gray-900">
+                      <span className="text-sm md:text-base font-black font-sans">
+                        {toPersianDigits(formatPrice(product.price))}
+                      </span>
+                      <span className="text-[9px] text-gray-500">تومان</span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
             </CarouselItem>
           ))}
         </CarouselContent>
-
-        {/* دکمه‌های نویگیشن (چپ و راست) */}
-        {/* hidden md:flex یعنی در موبایل دکمه نباشد (با دست اسکرول کنند) */}
-        <div className="hidden md:block">
-          <CarouselPrevious className="left-0 -translate-x-1/2 bg-white/80 backdrop-blur border-gray-200 hover:bg-white text-gray-800" />
-          <CarouselNext className="right-0 translate-x-1/2 bg-white/80 backdrop-blur border-gray-200 hover:bg-white text-gray-800" />
-        </div>
       </Carousel>
     </section>
   );
