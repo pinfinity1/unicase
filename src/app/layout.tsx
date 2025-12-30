@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Vazirmatn } from "next/font/google";
+import { Inter, Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
@@ -8,6 +8,12 @@ import { GlassEffects } from "@/components/ui/glass-effects";
 const vazir = Vazirmatn({
   subsets: ["arabic"],
   variable: "--font-vazir",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -27,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="fa" dir="rtl">
       <body
-        className={`${vazir.variable} font-sans antialiased bg-gray-50 text-foreground`}
+        className={`${vazir.variable} ${inter.variable} font-sans antialiased bg-gray-50 text-foreground`}
       >
         <Providers>
           {children}

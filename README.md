@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Unicase 🛍️
 
-## Getting Started
+**Unicase** is a generic e-commerce platform designed for the Iranian market, featuring a **Server-Centric** architecture using Next.js 15 (App Router).
 
-First, run the development server:
+## 🚀 Tech Stack
+
+- **Framework:** Next.js 15 (App Router)
+- **Language:** TypeScript (Strict Mode)
+- **Database:** PostgreSQL (Managed by Prisma ORM)
+- **Styling:** Tailwind CSS + Shadcn UI
+- **Auth:** Auth.js (v5)
+- **Validation:** Zod
+- **Payment:** Zarinpal Integration
+- **State Management:** React Server Components (Server) + Zustand (Client)
+
+## 📂 Project Structure
+
+The project follows a **Domain-Driven Design (DDD)** approach tailored for Next.js App Router (Vertical Slicing):
+
+- **`src/app`**: Application routes (Public Storefront, Auth, Admin Dashboard).
+- **`src/actions`**: Server Actions for database mutations (RPC-style, No API routes).
+- **`src/components`**:
+  - `ui/`: **Atomic Primitives** (Shadcn UI base components).
+  - `admin/`, `cart/`, `product/`: **Domain Modules** (Encapsulated feature logic).
+- **`src/lib`**: Shared Kernel & Core utilities (DB Singleton, S3 Handler, Zarinpal).
+- **`docs/`**: Project Knowledge Base (The "Brain").
+
+## 🛠️ Getting Started
+
+### 1. Prerequisites
+
+- **Node.js:** v18.17 or higher
+- **Docker:** Required for running the local PostgreSQL database.
+
+### 2. Installation
+
+```bash
+# Clone the repository
+git clone [https://github.com/your-username/unicase.git](https://github.com/your-username/unicase.git)
+cd unicase
+
+# Install dependencies
+npm install
+
+# Setup Environment Variables
+# Duplicate the example env file and fill in your secrets
+cp .env.example .env
+```
+
+````
+
+### 3. Database Setup
+
+We use Docker to run a local instance of PostgreSQL.
+
+```bash
+# 1. Start the Postgres container
+docker-compose up -d
+
+# 2. Run migrations to create tables
+npx prisma migrate dev
+
+# 3. Seed the database with initial data (Categories, Admin User)
+npx prisma db seed
+
+```
+
+### 4. Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Open [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000) to view the **Storefront**.
+- Access [http://localhost:3000/admin](https://www.google.com/search?q=http://localhost:3000/admin) for the **Back-Office**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🤝 Contribution Rules
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Before writing any code, please read the documentation in the `docs/` folder to understand the "Unicase Way":
 
-## Learn More
+1. **Architecture:** [docs/architecture.md](https://www.google.com/search?q=./docs/architecture.md) - System design & directory structure.
+2. **Coding Rules:** [docs/rules.md](https://www.google.com/search?q=./docs/rules.md) - Standards for AI & Human collaboration.
+3. **Design System:** [docs/design-guidelines.md](https://www.google.com/search?q=./docs/design-guidelines.md) - UI/UX & Apple-style aesthetic.
 
-To learn more about Next.js, take a look at the following resources:
+## 📝 Change Log
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See [changes-log.log](https://www.google.com/search?q=./changes-log.log) for a list of notable changes and updates.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+_Built with ❤️ by the Unicase Engineering Team_
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+````

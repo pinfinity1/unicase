@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 
 @theme inline {
-  --font-sans: var(--font-vazir);
+  --font-sans: var(--font-vazir), var(--font-inter), -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
   --font-mono: var(--font-geist-mono);
 
@@ -118,6 +119,12 @@ input:focus {
 /* src/app/globals.css */
 
 @layer utilities {
+  .font-en {
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont,
+      sans-serif;
+    letter-spacing: -0.02em;
+  }
+
   .perspective-1000 {
     perspective: 1000px;
   }
