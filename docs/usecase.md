@@ -38,29 +38,74 @@
 
 ### 2.1. Product Data Model
 
-- **Product:** The base entity.
-- **Variant:** Specific SKUs (Color, Size, Storage, Wattage).
-- **Category:** Tree-based hierarchy (e.g., Electronics > Phones > Apple).
-- **Attributes:** Dynamic JSON schema based on Category.
+- **Core Entity:**
+  - **Product:** Base info (Name, Brand, Description, Specs).
+  - **Variant:** Specific SKUs (Color, Size, Storage). Overrides price/stock.
+  - **Media Gallery:** Support for multiple Images, and (Optional) Video/3D Models.
+- **Taxonomy & Relations:**
+  - **Category:** Tree-based hierarchy (e.g., Electronics > Phones > Apple).
+  - **Attributes:** Dynamic JSON schema defined by Category (e.g., "CPU" for Phones).
+  - **Cross-Sell:** "Frequently bought together" items (for increasing basket size).
 
-### 2.2. Dynamic Pricing Logic (Currency Aware)
+### 2.2. Hybrid Pricing Engine (Fixed vs. Dynamic)
 
-- **Problem:** Due to daily currency fluctuations, manual price updates are inefficient.
-- **Solution:**
-  - **Base Price:** Products store a `BasePrice` (e.g., in USD or Fixed Unit).
-  - **Global Multiplier:** Admin sets a `CurrencyRate` (e.g., 60,000 Tomans) in `SiteSettings`.
-  - **Calculation:** `DisplayPrice = BasePrice * CurrencyRate`.
-- **Smart Rounding:** Calculated prices should automatically round to meaningful numbers (e.g., round 1,234,500 to 1,235,000).
-- **Snapshot Rule:** When an **Order** is placed, the _calculated price_ at that exact moment must be saved into `OrderItem`. Future currency changes MUST NOT change the price of past orders.
+- **Strategy:** Each product acts based on a `PricingMethod`:
+  1.  **FIXED (Toman):** For local items. Price is static.
+  2.  **DYNAMIC (Currency):** For imported items. `BasePrice` (USD/AED) \* `CurrencyRate`.
+- **Smart Rounding:** Calculated prices automatically round to the nearest 5,000 or 10,000 Toman.
+- **Discount Logic:** `FinalPrice = (DisplayPrice) - Discount`. Discounts are applied _after_ currency conversion.
+- **Snapshot Rule:** When an **Order** is placed, the exact calculated `FinalPrice` (in Toman) is saved in `OrderItem`. Future currency changes MUST NOT affect past orders.
+
+### 2.3. SEO & Discovery Logic
+
+- **Technical SEO Fields:**
+  - **Slug:** Unique, URL-friendly string. Auto-generated from name if left empty, but editable by Admin.
+  - **Meta Tags:** Fields for `Meta Title` and `Meta Description` (separate from product name/desc).
+  - **Canonical URL:** Option to set a custom canonical if this product is a duplicate/variant of another page.
+- **Structured Data (JSON-LD):**
+  - System must auto-generate `Product` and `BreadcrumbList` schema for Google Rich Snippets (Price, Availability, Review Rating).
+- **Open Graph:**
+  - Auto-map Product Image and Title to OG tags for proper sharing on Telegram/Instagram/Twitter.
+- **Sitemap:**
+  - Products with `isAvailable=true` and `isArchived=false` must automatically appear in `sitemap.xml`.
 
 ## 3. Search, Filter & Compatibility
 
-### 3.1. Contextual Discovery
+### 3.1. Advanced Search Engine
 
-- **Dynamic Filters:** Filter keys adapt to the current Category context.
-- **Device Compatibility:**
-  - User selects "Target Device" (e.g., "iPhone 13").
-  - Catalog hides incompatible accessories automatically.
+- **Persian Linguistics (Normalization):**
+  - **Character Sanitization:** System must automatically normalize Arabic characters to Persian (e.g., 'ي' → 'ی', 'ك' → 'ک') in both search queries and database indexing.
+  - **Typo Tolerance:** Implementation of Fuzzy Search (using PostgreSQL `pg_trgm`) to handle minor misspellings (e.g., searching "Sammsung" should find "Samsung").
+- **Weighted Ranking Algorithm:**
+  - Search results are sorted by relevance score: `Exact SKU Match` > `Product Name` > `Brand Name` > `Description` > `Tags`.
+  - **Boost Logic:** Promoted items (`isFeatured`) or "Best Sellers" receive a slight relevance boost.
+
+### 3.2. Dynamic Faceted Filtering
+
+- **Context-Aware Filters:**
+  - Filters must be generated dynamically based on the **Category** and the **Attribute JSON** of the visible products.
+  - _Example:_ If the user visits "Mobile Phones", the sidebar shows filters for "RAM", "CPU", "Screen Size". If they visit "Bags", it shows "Material", "Washability".
+- **Logic & UX:**
+  - **Smart Counts:** Display the number of matching results next to each filter option (e.g., "Blue (12)").
+  - **Multi-Select Logic:** Selections within a group use `OR` (Apple OR Samsung), while selections across groups use `AND` (Apple AND 256GB).
+  - **Price Range:** A slider reflecting the actual Min/Max price of the current category.
+
+### 3.3. Compatibility Engine ("My Garage")
+
+- **Device-Centric Shopping:**
+  - **User "Garage":** Users can select their active device (e.g., "iPhone 13 Pro Max") from a global dropdown.
+  - **Auto-Filtering:** Once a device is selected, the catalog strictly filters to show **ONLY** compatible accessories (Cases, Chargers, Screen Protectors).
+  - **Visual Cues:** If a user lands on an incompatible product page directly (e.g., via Google), a warning banner appears: _"⚠️ This item is not compatible with your iPhone 13 Pro Max"_.
+
+### 3.4. Sorting & Availability Rules
+
+- **Inventory-First Sorting:**
+  - By default, "In Stock" items always appear **before** "Out of Stock" items, regardless of other sort criteria.
+- **Sort Options:**
+  - **Relevance:** (Default for Search)
+  - **Newest:** (Default for Categories)
+  - **Most Popular:** Based on `SalesCount` (Last 30 Days).
+  - **Price:** Low to High / High to Low.
 
 ## 4. Cart & Checkout
 
