@@ -43,15 +43,15 @@
 - **Category:** Tree-based hierarchy (e.g., Electronics > Phones > Apple).
 - **Attributes:** Dynamic JSON schema based on Category.
 
-### 2.2. Currency-Aware Pricing
+### 2.2. Dynamic Pricing Logic (Currency Aware)
 
-- **Base Price:** Stored in a stable unit (Toman) in the database.
-- **Global Multiplier:** `CurrencyMultiplier` (Admin Config).
-- **Display Price:** `BasePrice` \* `CurrencyMultiplier`.
-- **Price Snapshot:**
-  - When an Order is created, the _current_ calculated price is saved into `OrderItem`. Future currency fluctuations MUST NOT affect past orders.
-- **Volatility Protection:**
-  - If `CurrentPrice` > `CartItemPrice` at the moment of checkout -> **BLOCK** payment and alert user.
+- **Problem:** Due to daily currency fluctuations, manual price updates are inefficient.
+- **Solution:**
+  - **Base Price:** Products store a `BasePrice` (e.g., in USD or Fixed Unit).
+  - **Global Multiplier:** Admin sets a `CurrencyRate` (e.g., 60,000 Tomans) in `SiteSettings`.
+  - **Calculation:** `DisplayPrice = BasePrice * CurrencyRate`.
+- **Smart Rounding:** Calculated prices should automatically round to meaningful numbers (e.g., round 1,234,500 to 1,235,000).
+- **Snapshot Rule:** When an **Order** is placed, the _calculated price_ at that exact moment must be saved into `OrderItem`. Future currency changes MUST NOT change the price of past orders.
 
 ## 3. Search, Filter & Compatibility
 
@@ -160,18 +160,99 @@
 
 ## 11. Admin Operations & Analytics
 
-### 11.1. Operational Controls
+### 11.1. Operational Dashboard & Macro Controls
 
-- **Macro Economy:** Single input to update `CurrencyMultiplier`.
-- **Inventory Health:** Dashboard alerts for "Low Stock" items.
+- **Macro Economy (Currency Engine):**
+  - **Global Multiplier:** A single input field to update the `CurrencyRate` (e.g., set Dollar rate to 60,000 Toman).
+  - **Real-time Reflection:** All product prices on the storefront (`BasePrice * CurrencyRate`) must update immediately upon saving.
+- **Inventory Health (Low Stock Alert):**
+  - **Dashboard Widget:** Displays a list of products/variants where `Stock < Threshold` (default 5).
+  - **Action:** Quick link to "Restock" directly from the dashboard.
 
-### 11.2. Business Intelligence (BI)
+### 11.2. Advanced Catalog Management
 
-- **Reports:** Sales Volume, Revenue, Best Selling Categories.
-- **Funnel Analysis:** Cart Abandonment Rate.
+- **Product Lifecycle:**
+  - **Drafting:** Create products in `DRAFT` mode (hidden) before publishing.
+  - **Versioning:** (Optional) Keep history of price/stock changes for 30 days.
+  - **Bulk Actions:** Select multiple products to: Change Status (Archive/Active), Update Stock, or Move Category.
+- **Variant Logic:**
+  - Independent SKU management for each Variant (Color/Size).
+  - **Price Override:** Ability to set specific price additions for variants (e.g., Gold color is +500,000 Toman \* CurrencyRate).
+- **Dynamic Attributes:**
+  - Define custom specs based on Category (e.g., "Screen Size" for Phones, "Fabric" for Clothes).
+
+### 11.3. Order Fulfillment & Logistics
+
+- **Order Workflow:**
+  - **Verification:** Manually verify high-value orders (> 100M Toman) before Processing.
+  - **Shipping:** Batch print shipping labels/invoices.
+  - **Manual Override:** Admin can cancel an order manually and trigger a refund process.
+- **RMA (Return Merchandise Authorization):**
+  - **Review Request:** View user uploaded images for return requests.
+  - **Decision:** Approve (Issue Return Label) or Reject (with reason).
+  - **Restocking:** Upon receiving returned item, decide to: "Add back to Stock" or "Mark as Damaged".
+
+### 11.4. Marketing & Growth Engine
+
+- **Coupon System:**
+  - **Types:** Percentage (e.g., 10%) or Fixed Amount (e.g., 50k Toman).
+  - **Conditions:** Min Order Value, Specific Category Only, Max Usage Total, Max Usage Per User.
+  - **Expiry:** Auto-disable coupon after `EndDate`.
+- **Campaign Management:**
+  - **Hero Banner:** Upload and schedule Main Slider images.
+  - **Flash Sales:** Set timer-based discounts for "Amazing Offers" (Pishnahad Shegeft-Angiz).
+
+### 11.5. Financial & Users
+
+- **User Management:**
+  - **Audit Logs:** View activity log of a user (Last login IP, Failed payment attempts).
+  - **Role Management:** Granular permissions (e.g., "Content Editor" can only change products, not view sales).
+- **Financial Reconciliation:**
+  - **Gateway Check:** List successful payments that don't have a matching Order (Zombie Transactions).
+  - **Daily Report:** Total Revenue, Cancelled Orders Value, Net Profit.
 
 ## 12. Security & Compliance
 
 - **Data Safety:** Rate Limiting on all public POST endpoints.
 - **CSRF Protection:** Native Next.js protection.
 - **Audit Logging:** Record all high-risk Admin actions (Price changes, Refunds, Bans).
+
+## 13. User Dashboard & Profile (Enterprise Level)
+
+### 13.1. Dashboard & Identity
+
+- **Profile Completion:** Progress bar for "Verify Email", "Add Address", "Set Birthday".
+- **Security Center:**
+  - **Change Password:** Requires `CurrentPassword` validation.
+  - **Active Sessions:** View and revoke other logged-in devices (Sessions).
+
+### 13.2. Order Management (User Side)
+
+- **Detailed Tracking:** Visual timeline: `Paid` -> `Processing` -> `Shipped` -> `Delivered`.
+- **Actionable Items:**
+  - **Cancel Order:** Only available if status is `PENDING` or `PAID` (Not `PROCESSING`).
+  - **Re-Payment:** If a payment failed, retry specifically for that OrderID without rebuilding the cart.
+- **Invoice:** Download official PDF invoice (Factor).
+
+### 13.3. Returns (RMA) Flow
+
+- **Initiate Return:**
+  - Select specific item from a `DELIVERED` order.
+  - Select Reason (Defective, Wrong Item, Changed Mind).
+  - **Evidence:** Mandatory photo upload for "Defective" claims.
+  - **Status:** Track return status (Pending Review -> Courier on way -> Refunded).
+
+### 13.4. Wallet & Credits (Optional Phase)
+
+- **Balance View:** View current store credit (Toman).
+- **History:** List of "Deposit" (Refunds/Gift Cards) and "Withdrawal" (Purchases).
+
+### 13.5. Address Book Logic
+
+- **Geo-Location:** Select location on map (Leaflet/Google Maps) to auto-fill City/Province.
+- **Validation:** Postal code validation (10 digits) before saving.
+
+### 13.6. Engagement
+
+- **Notifications:** In-app inbox for "Order Shipped", "Price Drop Alert", or "Welcome Coupon".
+- **Comments:** View status of submitted comments (Pending/Published/Rejected).

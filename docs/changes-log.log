@@ -1,0 +1,15 @@
+# Changelog
+
+## [Unreleased]
+
+## [0.1.0] - 2025-01-01
+### Added
+- **Authentication Module (Vertical Slice):**
+  - Implemented unified login/register flow with phone number.
+  - Added `User` and `VerificationToken` models to Prisma schema.
+  - Created Server Actions for Auth: `checkUser`, `login`, `register`, `sendOtp`, `verifyOtp`.
+  - Implemented Zod schemas for strict input validation (`LoginSchema`, `RegisterSchema`).
+  - Added UI components: `AuthCard`, `PhoneStep`, `LoginStep`, `RegisterStep`, `OtpStep` with Framer Motion animations.
+  - Integrated `NextAuth v5` (Beta) for session management (JWT strategy).
+  - Implemented Role-Based Access Control (RBAC) middleware for `/admin` routes.
+  - Implemented Rate Limiting (In-Memory) for OTP requests.

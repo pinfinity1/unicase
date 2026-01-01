@@ -2,7 +2,6 @@
 
 import { signIn, signOut } from "@/auth";
 import { AuthError } from "next-auth";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { FormState } from "@/types";
 import bcrypt from "bcryptjs";
@@ -10,22 +9,7 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { cookies, headers } from "next/headers";
 import { cartService } from "@/services/cart-service";
 import { checkRateLimit, generateSecureOtp } from "@/lib/security";
-
-const LoginSchema = z.object({
-  phoneNumber: z.string().min(11, "شماره موبایل باید ۱۱ رقم باشد"),
-  password: z.string().min(6, "رمز عبور باید حداقل ۶ کاراکتر باشد"),
-});
-
-const RegisterSchema = z
-  .object({
-    phoneNumber: z.string().min(11),
-    password: z.string().min(6),
-    confirmPassword: z.string().min(6),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "رمز عبور و تایید آن مطابقت ندارند",
-    path: ["confirmPassword"],
-  });
+import { LoginSchema, RegisterSchema } from "@/lib/validations/auth";
 
 export async function checkUserAction(
   phoneNumber: string
@@ -54,10 +38,6 @@ export async function loginAction(
   prevState: FormState | undefined,
   formData: FormData
 ): Promise<FormState | undefined> {
-  // ... همان کد قبلی ...
-  // فقط برای خلاصه شدن اینجا نیاوردم، کد شما در فایل اصلی صحیح بود
-  // تنها نکته: اگر بخواهید روی لاگین هم Rate Limit بگذارید، مشابه checkUserAction عمل کنید.
-
   const rawData = {
     phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
@@ -105,18 +85,33 @@ export async function loginAction(
     });
     return { success: true, message: "ورود موفقیت‌آمیز" };
   } catch (error) {
+    if (isRedirectError(error)) throw error;
+
     if (error instanceof AuthError) {
       switch (error.type) {
+        case "CallbackRouteError":
+          return {
+            success: false,
+            message: (error.cause as any)?.message || "خطا در احراز هویت.",
+          };
+
         case "CredentialsSignin":
           return {
             success: false,
-            message: "شماره موبایل یا رمز عبور اشتباه است.",
+            message: "اطلاعات ورود صحیح نیست.",
           };
+
         default:
-          return { success: false, message: "خطایی رخ داد." };
+          return {
+            success: false,
+            message: "خطایی در سیستم رخ داد.",
+          };
       }
     }
-    throw error;
+
+    // ۳. خطاهای پیش‌بینی نشده
+    console.error("Auth Action Error:", error);
+    return { success: false, message: "خطای سرور رخ داد." };
   }
 }
 
@@ -127,18 +122,46 @@ export async function registerAction(
   const token = formData.get("token") as string;
   const rawPhoneNumber = formData.get("phoneNumber") as string;
 
-  const verifiedToken = await db.verificationToken.findFirst({
+  // گام ۱: پیدا کردن توکن فعال (بدون چک کردن خود کد توکن در شرط where)
+  const activeVerification = await db.verificationToken.findFirst({
     where: {
       phoneNumber: rawPhoneNumber,
-      token,
       expires: { gt: new Date() },
     },
   });
 
-  if (!verifiedToken) {
-    return { success: false, message: "کد تایید اشتباه یا منقضی است" };
+  if (!activeVerification) {
+    return {
+      success: false,
+      message: "کد تایید منقضی شده یا وجود ندارد. لطفاً مجدد درخواست دهید.",
+    };
   }
 
+  // گام ۲: بررسی صحت کد
+  if (activeVerification.token !== token) {
+    const newAttempts = activeVerification.attempts + 1;
+
+    // اگر ۳ بار اشتباه زد، کد را بسوزان
+    if (newAttempts >= 3) {
+      await db.verificationToken.delete({
+        where: { id: activeVerification.id },
+      });
+      return {
+        success: false,
+        message: "تعداد تلاش‌های ناموفق بیش از حد مجاز بود. کد باطل شد.",
+      };
+    }
+
+    // آپدیت تعداد تلاش‌ها
+    await db.verificationToken.update({
+      where: { id: activeVerification.id },
+      data: { attempts: newAttempts },
+    });
+
+    return { success: false, message: "کد وارد شده صحیح نیست." };
+  }
+
+  // ادامه اعتبارسنجی فرم ثبت‌نام
   const validatedFields = RegisterSchema.safeParse(
     Object.fromEntries(formData.entries())
   );
@@ -166,11 +189,14 @@ export async function registerAction(
         phoneNumber,
         password: hashedPassword,
         role: "USER",
+        status: "ACTIVE", // وضعیت پیش‌فرض
       },
     });
 
-    await db.verificationToken.delete({ where: { id: verifiedToken.id } });
+    // حذف توکن پس از موفقیت
+    await db.verificationToken.delete({ where: { id: activeVerification.id } });
 
+    // انتقال سبد خرید مهمان (Logic Merge Cart)
     const cookieStore = await cookies();
     const guestCartId = cookieStore.get("cartId")?.value;
 
@@ -193,24 +219,55 @@ export async function registerAction(
   } catch (error) {
     if (isRedirectError(error)) throw error;
 
-    return {
-      success: false,
-      message: error instanceof AuthError ? "خطا در ورود خودکار" : "خطای سرور",
-    };
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CallbackRouteError":
+          return {
+            success: false,
+            message: (error.cause as any)?.message || "خطا در احراز هویت.",
+          };
+
+        case "CredentialsSignin":
+          return {
+            success: false,
+            message: "اطلاعات ورود صحیح نیست.",
+          };
+
+        default:
+          return {
+            success: false,
+            message: "خطایی در سیستم رخ داد.",
+          };
+      }
+    }
+
+    // ۳. خطاهای پیش‌بینی نشده
+    console.error("Auth Action Error:", error);
+    return { success: false, message: "خطای سرور رخ داد." };
   }
 }
 
 export async function sendOtpAction(phoneNumber: string) {
   const ip = (await headers()).get("x-forwarded-for") || "unknown";
 
-  if (!checkRateLimit(`send_otp_${ip}`, 3, 120)) {
+  if (!checkRateLimit(`send_otp_${ip}`, 10, 3600)) {
     return {
       success: false,
-      message: "تعداد درخواست‌های OTP شما زیاد است. لطفاً ۲ دقیقه صبر کنید.",
+      message:
+        "تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً ۱ ساعت دیگر تلاش کنید.",
     };
   }
 
   try {
+    const user = await db.user.findUnique({
+      where: { phoneNumber },
+      select: { status: true },
+    });
+
+    if (user?.status === "BANNED") {
+      return { success: false, message: "حساب کاربری شما مسدود است." };
+    }
+
     const lastToken = await db.verificationToken.findFirst({
       where: { phoneNumber },
       orderBy: { expires: "desc" },
@@ -221,8 +278,6 @@ export async function sendOtpAction(phoneNumber: string) {
       const diffInSeconds = Math.floor(
         (lastToken.expires.getTime() - now.getTime()) / 1000
       );
-
-      const timeSinceCreation = 120 - diffInSeconds;
 
       if (diffInSeconds > 60) {
         return {
@@ -238,7 +293,12 @@ export async function sendOtpAction(phoneNumber: string) {
     await db.$transaction([
       db.verificationToken.deleteMany({ where: { phoneNumber } }),
       db.verificationToken.create({
-        data: { phoneNumber, token: otp, expires },
+        data: {
+          phoneNumber,
+          token: otp,
+          expires,
+          attempts: 0,
+        },
       }),
     ]);
 
@@ -246,6 +306,7 @@ export async function sendOtpAction(phoneNumber: string) {
       console.log(`[SECURE AUTH] OTP for ${phoneNumber}: ${otp}`);
     }
 
+    // اینجا باید سرویس پیامک واقعی فراخوانی شود
     return { success: true };
   } catch (error) {
     console.error("OTP Error:", error);
@@ -304,26 +365,49 @@ export async function verifyOtpAction(
   const token = formData.get("token") as string;
 
   try {
-    const verifiedToken = await db.verificationToken.findFirst({
+    const activeVerification = await db.verificationToken.findFirst({
       where: {
         phoneNumber,
-        token,
         expires: { gt: new Date() },
       },
     });
 
-    if (!verifiedToken) {
-      return { success: false, message: "کد تایید اشتباه است یا منقضی شده." };
+    if (!activeVerification) {
+      return { success: false, message: "کد تایید منقضی شده یا وجود ندارد." };
     }
 
-    await db.verificationToken.delete({ where: { id: verifiedToken.id } });
+    if (activeVerification.token !== token) {
+      const newAttempts = activeVerification.attempts + 1;
+
+      if (newAttempts >= 3) {
+        await db.verificationToken.delete({
+          where: { id: activeVerification.id },
+        });
+        return {
+          success: false,
+          message: "تعداد تلاش‌های ناموفق بیش از حد مجاز بود. کد باطل شد.",
+        };
+      }
+
+      await db.verificationToken.update({
+        where: { id: activeVerification.id },
+        data: { attempts: newAttempts },
+      });
+
+      return { success: false, message: "کد وارد شده صحیح نیست." };
+    }
+
+    await db.verificationToken.delete({ where: { id: activeVerification.id } });
 
     const user = await db.user.findUnique({
       where: { phoneNumber },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
     if (user) {
+      if (user.status === "BANNED")
+        return { success: false, message: "حساب مسدود است." };
+
       const cookieStore = await cookies();
       const guestCartId = cookieStore.get("cartId")?.value;
 
@@ -346,7 +430,31 @@ export async function verifyOtpAction(
     return { success: true, message: "خوش آمدید!" };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, message: "خطایی در تایید کد رخ داد." };
+
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CallbackRouteError":
+          return {
+            success: false,
+            message: (error.cause as any)?.message || "خطا در احراز هویت.",
+          };
+
+        case "CredentialsSignin":
+          return {
+            success: false,
+            message: "اطلاعات ورود صحیح نیست.",
+          };
+
+        default:
+          return {
+            success: false,
+            message: "خطایی در سیستم رخ داد.",
+          };
+      }
+    }
+
+    console.error("Auth Action Error:", error);
+    return { success: false, message: "خطای سرور رخ داد." };
   }
 }
 

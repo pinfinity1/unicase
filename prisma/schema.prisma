@@ -9,24 +9,31 @@ datasource db {
 
 enum Role {
   USER
+  SUPPORT
   ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
 model User {
-  id          String  @id @default(cuid())
-  phoneNumber String  @unique
+  id          String     @id @default(cuid())
+  phoneNumber String     @unique
   name        String?
-  password    String?
-  role        Role    @default(USER)
+  password    String?   
+  role        Role       @default(USER)
+  status      UserStatus @default(ACTIVE)
 
-  orders Order[]
-  cart   Cart?
+  orders      Order[]
+  cart        Cart?
+  addresses   Address[]
+  wishlist    Wishlist[]
 
-  addresses Address[]
-  wishlist  Wishlist[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
 
 model VerificationToken {
@@ -34,6 +41,8 @@ model VerificationToken {
   phoneNumber String
   token       String   @unique
   expires     DateTime
+  attempts    Int      @default(0) 
+
   @@unique([phoneNumber, token])
 }
 

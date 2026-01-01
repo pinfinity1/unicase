@@ -1,21 +1,39 @@
-// مسیر: src/lib/auth-guard.ts
 import { auth } from "@/auth";
-import { redirect } from "next/navigation";
 
 export async function requireAdmin() {
   const session = await auth();
 
-  // ۱. اگر اصلا لاگین نبود
   if (!session || !session.user) {
-    // می‌تونیم ارور بدیم یا ریدایرکت کنیم. برای اکشن‌ها ارور بهتره.
     throw new Error("لطفاً ابتدا وارد حساب کاربری شوید.");
   }
 
-  // ۲. اگر لاگین بود ولی ادمین نبود
+  if (session.user.status === "BANNED") {
+    throw new Error("حساب کاربری شما مسدود شده است.");
+  }
+
+  if (session.user.status === "SUSPENDED") {
+    throw new Error("حساب شما موقتاً محدود شده است.");
+  }
+
   if (session.user.role !== "ADMIN") {
     throw new Error("دسترسی غیرمجاز! شما مدیر سیستم نیستید.");
   }
 
-  // ۳. اگر همه چی اوکی بود، اطلاعات کاربر رو برگردون
+  return session.user;
+}
+
+export async function requireStaff() {
+  const session = await auth();
+
+  if (!session?.user) throw new Error("لطفاً وارد شوید.");
+
+  if (session.user.status !== "ACTIVE") {
+    throw new Error("حساب شما فعال نیست.");
+  }
+
+  if (session.user.role !== "ADMIN" && session.user.role !== "SUPPORT") {
+    throw new Error("دسترسی غیرمجاز.");
+  }
+
   return session.user;
 }

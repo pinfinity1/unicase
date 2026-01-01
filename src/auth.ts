@@ -1,38 +1,37 @@
-// مسیر فایل: ./auth.ts
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
-
-// تعریف قوانین اعتبارسنجی ورودی
-const LoginSchema = z.object({
-  phoneNumber: z.string().min(11),
-  password: z.string().min(6),
-});
+import { LoginSchema } from "./lib/validations/auth";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
       authorize: async (credentials) => {
-        // ۱. دریافت پارامترهای ارسالی از اکشن‌ها
         const { phoneNumber, password, isOtpLogin } = credentials;
 
-        // ۲. سناریوی ورود با کد یکبار مصرف (OTP)
+        const user = await db.user.findUnique({
+          where: { phoneNumber: phoneNumber as string },
+        });
+
+        if (user) {
+          if (user.status === "BANNED") {
+            throw new Error("حساب کاربری شما مسدود شده است.");
+          }
+          if (user.status === "SUSPENDED") {
+            throw new Error(
+              "حساب شما موقتاً غیرفعال است. با پشتیبانی تماس بگیرید."
+            );
+          }
+        }
+
         if (isOtpLogin === "true") {
-          const user = await db.user.findUnique({
-            where: { phoneNumber: phoneNumber as string },
-          });
-
           if (!user) return null;
-
-          // در ورود با OTP، اگر کاربر وجود داشت، تایید می‌شود
           return user;
         }
 
-        // ۳. سناریوی ورود با رمز عبور (منطق قبلی شما)
         const validatedFields = LoginSchema.safeParse({
           phoneNumber,
           password,
@@ -53,7 +52,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   pages: {
-    signIn: "/login", // آدرس صفحه لاگین اختصاصی شما
+    signIn: "/login",
   },
   callbacks: {
     async jwt({ token, user }) {
